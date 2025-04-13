@@ -1,0 +1,90 @@
+{
+  "name": "paste-markdown-link",
+  "displayName": "Paste Markdown Link",
+  "description": "Paste URL as formatted Markdown link when text is selected",
+  "version": "1.0.0",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters",
+    "Other"
+  ],
+  "keywords": [
+    "markdown",
+    "link",
+    "paste",
+    "url"
+  ],
+  "bugs": {
+    "url": "https://github.com/tomchen/vscode-paste-markdown-link/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tomchen/vscode-paste-markdown-link"
+  },
+  "license": "MIT",
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "paste-markdown-link.paste",
+        "title": "Paste Markdown Link"
+      },
+      {
+        "command": "paste-markdown-link.paste-nocheck",
+        "title": "Paste Markdown Link (No URL Check)"
+      },
+      {
+        "command": "paste-markdown-link.paste-img",
+        "title": "Paste Markdown Image"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "paste-markdown-link.paste",
+        "key": "ctrl+v",
+        "mac": "cmd+v",
+        "when": "editorTextFocus && editorLangId =~ /^markdown$|^mdx|^rmd$|^quarto$/ && editorHasSelection"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onLanguage:markdown",
+    "onLanguage:mdx",
+    "onLanguage:rmd",
+    "onLanguage:quarto"
+  ],
+  "scripts": {
+    "vscode:prepublish": "bun run package",
+    "compile": "bun run check-types && bun run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "bun run check-types && bun run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "bun run compile-tests && bun run compile && bun run lint",
+    "checkall": "bun run check-types && bun run lint && bun run format",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "format": "prettier --write src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^8.28.0",
+    "@typescript-eslint/parser": "^8.28.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "esbuild": "^0.25.1",
+    "eslint": "^9.23.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2"
+  }
+}
