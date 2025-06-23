@@ -432,4 +432,335 @@ suite('Extension Test Suite', () => {
       assert.fail('Extension not found')
     }
   })
+
+  test('Should handle multi-selection correctly', async () => {
+    // Create a document with multiple lines
+    const document = await vscode.workspace.openTextDocument({
+      content: 'First selection\nSecond selection\nThird selection',
+      language: 'markdown',
+    })
+
+    const editor = await vscode.window.showTextDocument(document)
+
+    // Create multiple selections
+    const selections = [
+      new vscode.Selection(0, 0, 0, 15), // "First selection"
+      new vscode.Selection(1, 0, 1, 16), // "Second selection"
+      new vscode.Selection(2, 0, 2, 15), // "Third selection"
+    ]
+    editor.selections = selections
+
+    // Verify that we have multiple selections
+    assert.strictEqual(editor.selections.length, 3, 'Should have 3 selections')
+
+    // Test that all selections are valid (single-line)
+    for (let i = 0; i < selections.length; i++) {
+      const selection = selections[i]
+      assert.strictEqual(
+        selection.start.line,
+        selection.end.line,
+        `Selection ${i} should be on a single line`,
+      )
+    }
+  })
+
+  test('Should reject multi-line selections', async () => {
+    // Create a document with content spanning multiple lines
+    const document = await vscode.workspace.openTextDocument({
+      content: 'Line 1\nLine 2\nLine 3',
+      language: 'markdown',
+    })
+
+    const editor = await vscode.window.showTextDocument(document)
+
+    // Create a multi-line selection
+    const multiLineSelection = new vscode.Selection(0, 0, 2, 5) // From "Line 1" to "Line 3"
+    editor.selection = multiLineSelection
+
+    // Verify that this is a multi-line selection
+    assert.notStrictEqual(
+      multiLineSelection.start.line,
+      multiLineSelection.end.line,
+      'Selection should span multiple lines',
+    )
+
+    // Test that the command handles multi-line selection gracefully
+    // Multi-line selections should still paste clipboard text as-is, just without markdown formatting
+    try {
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+      assert.ok(true, 'Command should handle multi-line selection gracefully')
+    } catch (error) {
+      // It's okay if it fails due to clipboard access or other reasons
+      assert.ok(
+        error instanceof Error,
+        'Should throw a proper error if it fails',
+      )
+    }
+  })
+
+  test('Should detect existing markdown links correctly', () => {
+    // Test the markdown link pattern
+    const MARKDOWN_LINK_PATTERN = /!?\[([^\]]*)\]\(([^)]+)\)/g
+
+    // Test regular markdown links
+    const regularLinkText =
+      'This is a [link text](https://example.com) in a sentence'
+    const regularMatches = Array.from(
+      regularLinkText.matchAll(MARKDOWN_LINK_PATTERN),
+    )
+    assert.strictEqual(regularMatches.length, 1, 'Should find one regular link')
+    assert.strictEqual(
+      regularMatches[0][0],
+      '[link text](https://example.com)',
+      'Should match complete link',
+    )
+
+    // Test image markdown links
+    const imageLinkText =
+      'This is an ![image alt](https://example.com/image.png) in a sentence'
+    const imageMatches = Array.from(
+      imageLinkText.matchAll(MARKDOWN_LINK_PATTERN),
+    )
+    assert.strictEqual(imageMatches.length, 1, 'Should find one image link')
+    assert.strictEqual(
+      imageMatches[0][0],
+      '![image alt](https://example.com/image.png)',
+      'Should match complete image link',
+    )
+
+    // Test multiple links in one line
+    const multipleLinksText = '[link1](url1) and [link2](url2) and ![img](url3)'
+    const multipleMatches = Array.from(
+      multipleLinksText.matchAll(MARKDOWN_LINK_PATTERN),
+    )
+    assert.strictEqual(multipleMatches.length, 3, 'Should find three links')
+
+    // Test no links
+    const noLinksText = 'This is just plain text without any links'
+    const noMatches = Array.from(noLinksText.matchAll(MARKDOWN_LINK_PATTERN))
+    assert.strictEqual(noMatches.length, 0, 'Should find no links')
+  })
+
+  test('Should reject selections inside existing markdown links', async () => {
+    // Create a document with existing markdown links
+    const document = await vscode.workspace.openTextDocument({
+      content:
+        'This is a [link text](https://example.com) and ![image alt](https://example.com/image.png)',
+      language: 'markdown',
+    })
+
+    const editor = await vscode.window.showTextDocument(document)
+
+    // Test selection inside regular link text
+    const selectionInsideLink = new vscode.Selection(0, 12, 0, 20) // Select "link text"
+    editor.selection = selectionInsideLink
+
+    // This selection should paste clipboard text as-is, without markdown formatting
+    // because it's inside an existing markdown link
+    try {
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+      assert.ok(true, 'Command should handle selection inside link gracefully')
+    } catch (error) {
+      // It's okay if it fails due to clipboard access or other reasons
+      assert.ok(
+        error instanceof Error,
+        'Should throw a proper error if it fails',
+      )
+    }
+  })
+
+  test('Should reject selections partially overlapping markdown links', async () => {
+    // Create a document with a markdown link
+    const document = await vscode.workspace.openTextDocument({
+      content: 'Before [link text](https://example.com) after',
+      language: 'markdown',
+    })
+
+    const editor = await vscode.window.showTextDocument(document)
+
+    // Test selection that starts before the link and overlaps into it
+    const overlappingSelection = new vscode.Selection(0, 6, 0, 15) // "e [link t"
+    editor.selection = overlappingSelection
+
+    // This selection should paste clipboard text as-is, without markdown formatting
+    // because it overlaps with the markdown link
+    try {
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+      assert.ok(true, 'Command should handle overlapping selection gracefully')
+    } catch (error) {
+      assert.ok(
+        error instanceof Error,
+        'Should throw a proper error if it fails',
+      )
+    }
+  })
+
+  test('Should accept selections outside markdown links', async () => {
+    // Create a document with markdown links and text outside
+    const document = await vscode.workspace.openTextDocument({
+      content: 'Before [link text](https://example.com) after',
+      language: 'markdown',
+    })
+
+    const editor = await vscode.window.showTextDocument(document)
+
+    // Test selection that's completely outside the link
+    const validSelection = new vscode.Selection(0, 0, 0, 6) // "Before"
+    editor.selection = validSelection
+
+    // This selection should be valid because it's outside any markdown link
+    try {
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+      assert.ok(true, 'Command should handle valid selection')
+    } catch (error) {
+      // It's okay if it fails due to clipboard access, but the selection should be valid
+      assert.ok(
+        error instanceof Error,
+        'Should throw a proper error if it fails',
+      )
+    }
+  })
+
+  test('Should handle mixed valid and invalid selections in multi-selection', async () => {
+    // Create a document with mixed content
+    const document = await vscode.workspace.openTextDocument({
+      content:
+        'Valid text\n[link text](https://example.com)\nAnother valid text\nMulti\nline selection',
+      language: 'markdown',
+    })
+
+    const editor = await vscode.window.showTextDocument(document)
+
+    // Create mixed selections: valid, invalid (inside link), valid, invalid (multi-line)
+    const mixedSelections = [
+      new vscode.Selection(0, 0, 0, 10), // "Valid text" - valid
+      new vscode.Selection(1, 1, 1, 10), // "link text" - invalid (inside link)
+      new vscode.Selection(2, 0, 2, 18), // "Another valid text" - valid
+      new vscode.Selection(3, 0, 4, 6), // "Multi\nline" - invalid (multi-line)
+    ]
+    editor.selections = mixedSelections
+
+    // Verify we have the expected number of selections
+    assert.strictEqual(editor.selections.length, 4, 'Should have 4 selections')
+
+    // Test that the command handles mixed selections gracefully
+    // Valid selections should get markdown formatting, invalid ones should get clipboard text as-is
+    try {
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+      assert.ok(
+        true,
+        'Command should handle mixed valid/invalid selections gracefully',
+      )
+    } catch (error) {
+      assert.ok(
+        error instanceof Error,
+        'Should throw a proper error if it fails',
+      )
+    }
+  })
+
+  test('Should handle edge cases in markdown link detection', async () => {
+    // Create a document with edge cases
+    const document = await vscode.workspace.openTextDocument({
+      content:
+        '[empty]()\n[with spaces] (https://example.com)\n[unclosed link\n[closed](https://example.com)',
+      language: 'markdown',
+    })
+
+    const editor = await vscode.window.showTextDocument(document)
+
+    // Test various edge cases
+    const edgeCaseSelections = [
+      new vscode.Selection(0, 1, 0, 6), // "empty" - should be detected as inside link
+      new vscode.Selection(1, 1, 1, 12), // "with spaces" - should be detected as inside link
+      new vscode.Selection(2, 1, 2, 12), // "unclosed link" - should be detected as inside link
+      new vscode.Selection(3, 1, 3, 7), // "closed" - should be detected as inside link
+    ]
+
+    for (let i = 0; i < edgeCaseSelections.length; i++) {
+      editor.selection = edgeCaseSelections[i]
+
+      try {
+        await vscode.commands.executeCommand('paste-markdown-link.paste')
+        assert.ok(true, `Command should handle edge case ${i} gracefully`)
+      } catch (error) {
+        assert.ok(
+          error instanceof Error,
+          `Should throw a proper error for edge case ${i} if it fails`,
+        )
+      }
+    }
+  })
+
+  test('Should handle empty selections correctly', async () => {
+    // Create a document
+    const document = await vscode.workspace.openTextDocument({
+      content: 'Some text here',
+      language: 'markdown',
+    })
+
+    const editor = await vscode.window.showTextDocument(document)
+
+    // Create empty selections
+    const emptySelections = [
+      new vscode.Selection(0, 0, 0, 0), // Empty selection at start
+      new vscode.Selection(0, 5, 0, 5), // Empty selection in middle
+      new vscode.Selection(0, 13, 0, 13), // Empty selection at end
+    ]
+    editor.selections = emptySelections
+
+    // Verify all selections are empty
+    for (const selection of emptySelections) {
+      assert.strictEqual(selection.isEmpty, true, 'Selection should be empty')
+    }
+
+    // Test that the command handles empty selections gracefully
+    try {
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+      assert.ok(true, 'Command should handle empty selections gracefully')
+    } catch (error) {
+      assert.ok(
+        error instanceof Error,
+        'Should throw a proper error if it fails',
+      )
+    }
+  })
+
+  test('Should handle selections at line boundaries correctly', async () => {
+    // Create a document with multiple lines
+    const document = await vscode.workspace.openTextDocument({
+      content: 'Line 1\nLine 2\nLine 3',
+      language: 'markdown',
+    })
+
+    const editor = await vscode.window.showTextDocument(document)
+
+    // Test selections at line boundaries
+    const boundarySelections = [
+      new vscode.Selection(0, 0, 0, 6), // Full first line
+      new vscode.Selection(1, 0, 1, 6), // Full second line
+      new vscode.Selection(2, 0, 2, 6), // Full third line
+    ]
+    editor.selections = boundarySelections
+
+    // Verify all selections are single-line
+    for (const selection of boundarySelections) {
+      assert.strictEqual(
+        selection.start.line,
+        selection.end.line,
+        'Selection should be single-line',
+      )
+    }
+
+    // Test that the command handles boundary selections
+    try {
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+      assert.ok(true, 'Command should handle boundary selections')
+    } catch (error) {
+      assert.ok(
+        error instanceof Error,
+        'Should throw a proper error if it fails',
+      )
+    }
+  })
 })

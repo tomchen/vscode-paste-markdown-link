@@ -3,6 +3,43 @@ import * as vscode from 'vscode'
 const URL_PATTERN =
   /^(https?|ftps?|file|sftp|ssh|scp|mailto|tel|sms|callto|magnet|torrent|ed2k|thunder|dchub|dcpp|irc|ircs|news|nntp|git|svn|hg|data|blob|ipfs|ipns|chrome|chrome-extension|about|resource|moz-extension|ws|wss|vscode|cursor):(\/\/)?[^\s]+$/
 
+// Pattern to detect existing markdown links and images
+const MARKDOWN_LINK_PATTERN = /!?\[([^\]]*)\]\(([^)]+)\)/g
+
+function isSelectionValid(
+  selection: vscode.Selection,
+  document: vscode.TextDocument,
+): boolean {
+  // Check if selection is on a single line
+  if (selection.start.line !== selection.end.line) {
+    return false
+  }
+
+  // Get the line text
+  const lineText = document.lineAt(selection.start.line).text
+
+  // Check if selection is inside an existing markdown link
+  const regex = new RegExp(
+    MARKDOWN_LINK_PATTERN.source,
+    MARKDOWN_LINK_PATTERN.flags,
+  )
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(lineText)) !== null) {
+    const linkStart = match.index
+    const linkEnd = match.index + match[0].length
+
+    // Check if selection overlaps with the markdown link
+    if (
+      selection.start.character < linkEnd &&
+      selection.end.character > linkStart
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
 function paste(checkUrl: boolean = true, isImg: boolean = false) {
   return async () => {
     try {
@@ -17,25 +54,52 @@ function paste(checkUrl: boolean = true, isImg: boolean = false) {
       // console.log(`Has selection: ${!editor.selection.isEmpty}`);
 
       const clipboardText = await vscode.env.clipboard.readText()
-      const selection = editor.selection
-      const selectedText = editor.document.getText(selection)
+      const selections = editor.selections
 
-      // console.log(`Clipboard text: ${clipboardText}`);
-      // console.log(`Selected text: ${selectedText}`);
+      if (selections.length === 0) {
+        console.log('No selections found')
+        return
+      }
 
-      const rep =
-        ((checkUrl && URL_PATTERN.test(clipboardText)) || !checkUrl) &&
-        selectedText
-          ? `${isImg ? '!' : ''}[${selectedText}](${clipboardText})`
-          : clipboardText
-
+      // Process each selection - valid ones get markdown formatting, invalid ones get clipboard text as-is
       await editor.edit((editBuilder) => {
-        editBuilder.replace(selection, rep)
+        for (const selection of selections) {
+          const selectedText = editor.document.getText(selection)
+          const isValid = isSelectionValid(selection, editor.document)
+
+          let rep: string
+          if (isValid && selectedText) {
+            // Valid selection with text - apply markdown link formatting
+            rep =
+              (checkUrl && URL_PATTERN.test(clipboardText)) || !checkUrl
+                ? `${isImg ? '!' : ''}[${selectedText}](${clipboardText})`
+                : clipboardText
+          } else {
+            // Invalid selection or no selected text - paste clipboard text as-is
+            rep = clipboardText
+          }
+
+          editBuilder.replace(selection, rep)
+        }
       })
 
-      // Calculate new cursor position after replacement
-      const startLine = selection.start.line
-      const startChar = selection.start.character
+      // Update cursor position for the last selection
+      const lastSelection = selections[selections.length - 1]
+      const startLine = lastSelection.start.line
+      const startChar = lastSelection.start.character
+      const selectedText = editor.document.getText(lastSelection)
+      const isValid = isSelectionValid(lastSelection, editor.document)
+
+      let rep: string
+      if (isValid && selectedText) {
+        rep =
+          (checkUrl && URL_PATTERN.test(clipboardText)) || !checkUrl
+            ? `${isImg ? '!' : ''}[${selectedText}](${clipboardText})`
+            : clipboardText
+      } else {
+        rep = clipboardText
+      }
+
       const repLines = rep.split('\n')
       const lastLine = startLine + repLines.length - 1
       const lastLineLength = startChar + repLines[repLines.length - 1].length

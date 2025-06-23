@@ -23,10 +23,13 @@ Press <kbd>Ctrl + Shift + P</kbd> to open the command palette, then search for t
 
 - [1]: Markdown, MDX, R Markdown, and Quarto files are supported
 - [2]: Typically `http(s)` links, but also supports: _ftp(s), file, sftp, ssh, scp, mailto, tel, sms, callto, magnet, torrent, ed2k, thunder, dchub, dcpp, irc, ircs, news, nntp, git, svn, hg, data, blob, ipfs, ipns, chrome, chrome-extension, about, resource, moz-extension, ws, wss, vscode, cursor_
+- All three commands support multi-selection. Each selection is processed independently, as if it were a single selection
+- If one selection is within an existing Markdown link or image, the clipboard text will replace the selection as-is, without adding Markdown link syntax
+- If one selection spans multiple lines, the clipboard text will replace the selection as-is, without adding Markdown link syntax
 - Compatible with VS Code 1.75.0 or higher and its derivatives like Cursor
-- This extension is not needed if you're using [Markdown All in One](https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one), which already includes this feature. Paste Markdown Link is intended as a lightweight alternative for users who don't need the additional functionality provided by Markdown All in One.
+- This extension is not needed if you're using [Markdown All in One](https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one), which already includes this feature. Paste Markdown Link is intended as a lightweight alternative for users who don't need the additional functionality provided by Markdown All in One
 - No user settings are available
-- No runtime (bundled, non-dev) dependencies. It's minimalistic but includes comprehensive tests. Can be used as a template for other extensions.
+- No runtime (bundled, non-dev) dependencies. It's minimalistic yet includes comprehensive tests and a CI build pipeline targeting both the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=tomchen.paste-markdown-link) and the [Open VSX Registry](https://open-vsx.org/extension/tomchen/paste-markdown-link). It can serve as a template for other extensions
 - MIT License
 
 ## Release Notes
@@ -34,3 +37,8 @@ Press <kbd>Ctrl + Shift + P</kbd> to open the command palette, then search for t
 ### 1.0.2
 
 Initial release
+
+### 1.0.3
+
+- Add support for multi-selection
+- If a selection is inside an existing Markdown link/image or spans multiple lines, the clipboard text is pasted as-is without Markdown syntax
