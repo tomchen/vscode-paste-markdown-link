@@ -1,4 +1,4 @@
-# Paste Markdown Link <img width="32" src="icon.svg">
+# Paste Markdown Link <img width="32" src="icon.png">
 
 A simple VS Code extension that helps you create formatted Markdown links quickly. When you have text selected and paste a URL, it automatically formats it as a Markdown link (`[text](url)`).
 
