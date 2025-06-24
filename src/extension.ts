@@ -18,7 +18,7 @@ function isSelectionValid(
   // Get the line text
   const lineText = document.lineAt(selection.start.line).text
 
-  // Check if selection is inside an existing markdown link
+  // Check if selection is inside an existing markdown link (or image)
   const regex = new RegExp(
     MARKDOWN_LINK_PATTERN.source,
     MARKDOWN_LINK_PATTERN.flags,
@@ -28,7 +28,7 @@ function isSelectionValid(
     const linkStart = match.index
     const linkEnd = match.index + match[0].length
 
-    // Check if selection overlaps with the markdown link
+    // Check if selection overlaps with the markdown link (or image)
     if (
       selection.start.character < linkEnd &&
       selection.end.character > linkStart
@@ -40,86 +40,103 @@ function isSelectionValid(
   return true
 }
 
-function paste(checkUrl: boolean = true, isImg: boolean = false) {
+/**
+ * Paste the clipboard text as a Markdown link or image.
+ * @param forced - If true, use forced mode.
+ * @param isImg - If true, paste the clipboard text as a Markdown image.
+ *
+ * Detailed flow:
+ * - If the clipboard is empty:
+ *    – Do nothing
+ * - If not `forced`:
+ *    - If there is `selectedText`, `isSelectionValid()` returns `true`, and `clipboardText` is a URL:
+ *      → Paste a Markdown link using `selectedText` as the label
+ *    - Any other cases:
+ *      → Paste the clipboard text as-is
+ * - If `forced`:
+ *    - If there is no `selectedText`:
+ *      → Paste `[](${clipboardText})` (or `![](${clipboardText})` if it's an image URL),
+ *      → and place the cursor inside "[" and "]"
+ *    - If there is `selectedText` (regardless of `isSelectionValid()`'s result):
+ *      → Paste a Markdown link or image using `selectedText` as the label
+ */
+function paste(forced: boolean = false, isImg: boolean = false) {
   return async () => {
     try {
-      // console.log("Command executed");
       const editor = vscode.window.activeTextEditor
       if (!editor) {
         console.log('No active editor')
         return
       }
 
-      // console.log(`Current language: ${editor.document.languageId}`);
-      // console.log(`Has selection: ${!editor.selection.isEmpty}`);
-
       const clipboardText = await vscode.env.clipboard.readText()
-      const selections = editor.selections
 
+      // If the clipboard is empty, do nothing
+      if (!clipboardText.trim()) {
+        return
+      }
+
+      const selections = editor.selections
       if (selections.length === 0) {
         console.log('No selections found')
         return
       }
 
-      // Process each selection - valid ones get markdown formatting, invalid ones get clipboard text as-is
+      // Process each selection according to the new flow logic
+      let actualReplacementText: string = ''
       await editor.edit((editBuilder) => {
         for (const selection of selections) {
           const selectedText = editor.document.getText(selection)
           const isValid = isSelectionValid(selection, editor.document)
 
-          let rep: string
-          if (isValid && selectedText) {
-            // Valid selection with text - apply markdown link formatting
-            rep =
-              (checkUrl && URL_PATTERN.test(clipboardText)) || !checkUrl
-                ? `${isImg ? '!' : ''}[${selectedText}](${clipboardText})`
-                : clipboardText
-          } else if (!checkUrl && !selectedText) {
-            // No text selected and no URL check - create markdown link with placeholder
-            rep = `${isImg ? '!' : ''}[](${clipboardText})`
+          let replacementText: string
+
+          if (!forced) {
+            // Not forced mode
+            if (selectedText && isValid && URL_PATTERN.test(clipboardText)) {
+              // Valid selection with text and clipboard is URL - create markdown link
+              replacementText = `${isImg ? '!' : ''}[${selectedText}](${clipboardText})`
+            } else {
+              // Any other case - paste clipboard text as-is
+              replacementText = clipboardText
+            }
           } else {
-            // Invalid selection or no selected text - paste clipboard text as-is
-            rep = clipboardText
+            // Forced mode
+            if (!selectedText) {
+              // No selected text - create placeholder markdown link
+              replacementText = `${isImg ? '!' : ''}[](${clipboardText})`
+            } else {
+              // Has selected text (regardless of validity) - create markdown link
+              replacementText = `${isImg ? '!' : ''}[${selectedText}](${clipboardText})`
+            }
           }
 
-          editBuilder.replace(selection, rep)
+          actualReplacementText = replacementText
+          editBuilder.replace(selection, replacementText)
         }
       })
 
-      // Update cursor position for the last selection
+      // Update cursor position for the last selection using the actual replacement text
       const lastSelection = selections[selections.length - 1]
       const startLine = lastSelection.start.line
       const startChar = lastSelection.start.character
       const selectedText = editor.document.getText(lastSelection)
-      const isValid = isSelectionValid(lastSelection, editor.document)
 
-      let rep: string
-      if (isValid && selectedText) {
-        rep =
-          (checkUrl && URL_PATTERN.test(clipboardText)) || !checkUrl
-            ? `${isImg ? '!' : ''}[${selectedText}](${clipboardText})`
-            : clipboardText
-      } else if (!checkUrl && !selectedText) {
-        // No text selected and no URL check - create markdown link with placeholder
-        rep = `${isImg ? '!' : ''}[](${clipboardText})`
-      } else {
-        rep = clipboardText
-      }
-
-      const repLines = rep.split('\n')
-      const lastLine = startLine + repLines.length - 1
-      const lastLineLength = startChar + repLines[repLines.length - 1].length
+      const replacementLines = actualReplacementText.split('\n')
+      const lastLine = startLine + replacementLines.length - 1
+      const lastLineLength =
+        replacementLines[replacementLines.length - 1].length
 
       // Place cursor at the end of the pasted text, or inside brackets for placeholder links
       let newPosition: vscode.Position
-      if (!checkUrl && !selectedText) {
+      if (forced && !selectedText) {
         // Position cursor inside the brackets for placeholder links
         const prefixLength = isImg ? 1 : 0 // "!" for images, nothing for links
         const bracketStart = startChar + prefixLength + 1 // +1 for the opening "["
         newPosition = new vscode.Position(startLine, bracketStart)
       } else {
         // Place cursor at the end of the pasted text
-        newPosition = new vscode.Position(lastLine, lastLineLength)
+        newPosition = new vscode.Position(lastLine, startChar + lastLineLength)
       }
 
       editor.selection = new vscode.Selection(newPosition, newPosition)
@@ -142,12 +159,12 @@ export function activate(context: vscode.ExtensionContext) {
 
   let disposableNocheck = vscode.commands.registerCommand(
     'paste-markdown-link.paste-nocheck',
-    paste(false),
+    paste(true),
   )
 
   let disposableImg = vscode.commands.registerCommand(
     'paste-markdown-link.paste-img',
-    paste(false, true),
+    paste(true, true),
   )
 
   context.subscriptions.push(disposable, disposableNocheck, disposableImg)

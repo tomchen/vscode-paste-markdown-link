@@ -32,11 +32,11 @@
     "commands": [
       {
         "command": "paste-markdown-link.paste",
-        "title": "Paste Markdown Link"
+        "title": "Paste Markdown Link (Ctrl+V)"
       },
       {
         "command": "paste-markdown-link.paste-nocheck",
-        "title": "Paste Markdown Link (No URL Check)"
+        "title": "Paste Markdown Link"
       },
       {
         "command": "paste-markdown-link.paste-img",
