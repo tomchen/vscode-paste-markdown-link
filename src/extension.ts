@@ -74,6 +74,9 @@ function paste(checkUrl: boolean = true, isImg: boolean = false) {
               (checkUrl && URL_PATTERN.test(clipboardText)) || !checkUrl
                 ? `${isImg ? '!' : ''}[${selectedText}](${clipboardText})`
                 : clipboardText
+          } else if (!checkUrl && !selectedText) {
+            // No text selected and no URL check - create markdown link with placeholder
+            rep = `${isImg ? '!' : ''}[](${clipboardText})`
           } else {
             // Invalid selection or no selected text - paste clipboard text as-is
             rep = clipboardText
@@ -96,6 +99,9 @@ function paste(checkUrl: boolean = true, isImg: boolean = false) {
           (checkUrl && URL_PATTERN.test(clipboardText)) || !checkUrl
             ? `${isImg ? '!' : ''}[${selectedText}](${clipboardText})`
             : clipboardText
+      } else if (!checkUrl && !selectedText) {
+        // No text selected and no URL check - create markdown link with placeholder
+        rep = `${isImg ? '!' : ''}[](${clipboardText})`
       } else {
         rep = clipboardText
       }
@@ -104,8 +110,18 @@ function paste(checkUrl: boolean = true, isImg: boolean = false) {
       const lastLine = startLine + repLines.length - 1
       const lastLineLength = startChar + repLines[repLines.length - 1].length
 
-      // Place cursor at the end of the pasted text
-      const newPosition = new vscode.Position(lastLine, lastLineLength)
+      // Place cursor at the end of the pasted text, or inside brackets for placeholder links
+      let newPosition: vscode.Position
+      if (!checkUrl && !selectedText) {
+        // Position cursor inside the brackets for placeholder links
+        const prefixLength = isImg ? 1 : 0 // "!" for images, nothing for links
+        const bracketStart = startChar + prefixLength + 1 // +1 for the opening "["
+        newPosition = new vscode.Position(startLine, bracketStart)
+      } else {
+        // Place cursor at the end of the pasted text
+        newPosition = new vscode.Position(lastLine, lastLineLength)
+      }
+
       editor.selection = new vscode.Selection(newPosition, newPosition)
     } catch (error) {
       console.error('Error in command:', error)

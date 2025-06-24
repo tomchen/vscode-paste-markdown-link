@@ -3,7 +3,7 @@
   "publisher": "tomchen",
   "displayName": "Paste Markdown Link",
   "description": "Paste URL as formatted Markdown link when text is selected",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "icon": "icon.png",
   "engines": {
     "vscode": "^1.75.0"
@@ -79,8 +79,8 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/vscode": "^1.75.0",
-    "@typescript-eslint/eslint-plugin": "^8.34.1",
-    "@typescript-eslint/parser": "^8.34.1",
+    "@typescript-eslint/eslint-plugin": "^8.35.0",
+    "@typescript-eslint/parser": "^8.35.0",
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.25.5",
