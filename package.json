@@ -3,7 +3,7 @@
   "publisher": "tomchen",
   "displayName": "Paste Markdown Link",
   "description": "Paste URL as formatted Markdown link when text is selected",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "icon": "icon.png",
   "engines": {
     "vscode": "^1.75.0"

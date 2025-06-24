@@ -530,5 +530,225 @@ suite('Extension Test Suite', () => {
         'Cursor should be at end',
       )
     })
+
+    test('Should replace newlines with spaces in forced mode with multi-line selection', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'line1\nline2\nline3',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      const selection = new vscode.Selection(0, 0, 2, 5) // Select all three lines
+      editor.selection = selection
+
+      const selectedText = document.getText(selection)
+      const clipboardText = 'https://example.com'
+      // In forced mode, newlines should be replaced with spaces
+      const cleanedSelectedText = selectedText.replace(/\n/g, ' ')
+      const replacementText = `[${cleanedSelectedText}](${clipboardText})`
+
+      await editor.edit((editBuilder) => {
+        editBuilder.replace(selection, replacementText)
+      })
+
+      // Since newlines are replaced with spaces, the result should be single-line
+      const startChar = selection.start.character
+      const replacementLines = replacementText.split('\n')
+      const lastLine = selection.start.line + replacementLines.length - 1
+      const lastLineLength =
+        replacementLines[replacementLines.length - 1].length
+      const expectedPosition = new vscode.Position(
+        lastLine,
+        startChar + lastLineLength,
+      )
+
+      editor.selection = new vscode.Selection(
+        expectedPosition,
+        expectedPosition,
+      )
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '[line1 line2 line3](https://example.com)',
+        'Should create single-line markdown link with spaces',
+      )
+      assert.strictEqual(
+        editor.selection.start.line,
+        expectedPosition.line,
+        'Cursor should be on the same line',
+      )
+      assert.strictEqual(
+        editor.selection.start.character,
+        expectedPosition.character,
+        'Cursor should be at end',
+      )
+    })
+
+    test('Should replace newlines with spaces in forced mode with multi-line selection for images', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'alt text\nwith\nmultiple lines',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      const selection = new vscode.Selection(0, 0, 2, 14) // Select all three lines (line 2 has 'multiple lines' = 14 chars)
+      editor.selection = selection
+
+      const selectedText = document.getText(selection)
+      const clipboardText = 'https://example.com/image.jpg'
+      // In forced mode, newlines should be replaced with spaces
+      const cleanedSelectedText = selectedText.replace(/\n/g, ' ')
+      const replacementText = `![${cleanedSelectedText}](${clipboardText})`
+
+      await editor.edit((editBuilder) => {
+        editBuilder.replace(selection, replacementText)
+      })
+
+      // Since newlines are replaced with spaces, the result should be single-line
+      const startChar = selection.start.character
+      const replacementLines = replacementText.split('\n')
+      const lastLine = selection.start.line + replacementLines.length - 1
+      const lastLineLength =
+        replacementLines[replacementLines.length - 1].length
+      const expectedPosition = new vscode.Position(
+        lastLine,
+        startChar + lastLineLength,
+      )
+
+      editor.selection = new vscode.Selection(
+        expectedPosition,
+        expectedPosition,
+      )
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '![alt text with multiple lines](https://example.com/image.jpg)',
+        'Should create single-line markdown image with spaces',
+      )
+      assert.strictEqual(
+        editor.selection.start.line,
+        expectedPosition.line,
+        'Cursor should be on the same line',
+      )
+      assert.strictEqual(
+        editor.selection.start.character,
+        expectedPosition.character,
+        'Cursor should be at end',
+      )
+    })
+
+    test('Should position cursor correctly with multiple selections - specific bug case', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'abcde\nfghij\nklmno\npqrst\nuvwxyz',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+
+      // Create multiple selections:
+      // 1. First selection: "abcde\nfg" (multi-line)
+      // 2. Second selection: "kl" (single-line, this is the LAST selection)
+      const selections = [
+        new vscode.Selection(0, 0, 1, 2), // "abcde\nfg" (multi-line)
+        new vscode.Selection(2, 0, 2, 2), // "kl" (single-line, this is the LAST selection)
+      ]
+      editor.selections = selections
+
+      // Set up clipboard
+      await vscode.env.clipboard.writeText('http://example.com')
+
+      // Execute the command (normal mode, should paste URL as-is for first, link for second if valid)
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+
+      // First selection should be replaced with URL as-is: "http://example.com"
+      // Second selection should be replaced with markdown link: "[kl](http://example.com)"
+      const expectedContent =
+        'http://example.comhij\n[kl](http://example.com)mno\npqrst\nuvwxyz'
+      assert.strictEqual(
+        updatedContent,
+        expectedContent,
+        'Both selections should be replaced correctly',
+      )
+
+      // Cursor should be positioned at the end of the LAST selection's replacement
+      // The last selection was "kl" on line 2 (which becomes line 1 after first replacement), position 0-2
+      // After replacement it becomes "[kl](http://example.com)" = 24 characters
+      // So cursor should be at line 1, character 24
+      const expectedCursorLine = 1
+      const expectedCursorChar = 24 // length of "[kl](http://example.com)"
+
+      assert.strictEqual(
+        editor.selection.start.line,
+        expectedCursorLine,
+        'Cursor should be on the correct line',
+      )
+      assert.strictEqual(
+        editor.selection.start.character,
+        expectedCursorChar,
+        'Cursor should be at the end of the last selection replacement',
+      )
+    })
+
+    test('Should position cursor correctly when selections are not in document order', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'line1\nline2\nline3\nline4\nline5',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+
+      // Key insight: Create selections where the LAST in array appears BEFORE others in document
+      // Current buggy logic: processes array order but applies line deltas as if all non-last affect last
+      // This will incorrectly apply line deltas from selections that appear AFTER the last selection
+
+      const selections = [
+        new vscode.Selection(3, 0, 4, 5), // "line4\nline5" (2 lines become 1) - NOT last in array, appears AFTER
+        new vscode.Selection(1, 0, 1, 5), // "line2" - LAST in array, appears BEFORE the above selection
+      ]
+      editor.selections = selections
+
+      await vscode.env.clipboard.writeText('http://example.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste-nocheck')
+
+      const updatedContent = document.getText()
+
+      // Expected content:
+      // "line4\nline5" -> "[line4 line5](http://example.com)"
+      // "line2" -> "[line2](http://example.com)"
+      const expectedContent =
+        'line1\n[line2](http://example.com)\nline3\n[line4 line5](http://example.com)'
+      assert.strictEqual(
+        updatedContent,
+        expectedContent,
+        'Content should be correct',
+      )
+
+      // THE BUG: Current logic will incorrectly calculate cursor position
+      // - It processes "line4\nline5" first (array index 0), calculates lineDelta = -1 (2 lines -> 1 line)
+      // - Then it applies this lineDelta to "line2" position, even though "line4\nline5" appears AFTER "line2"
+      // - So it will think "line2" moved from line 1 to line 0, which is wrong
+
+      // CORRECT: "line2" is on line 1, becomes "[line2](http://example.com)" (27 chars)
+      // WRONG (with current bug): cursor might be calculated for line 0 + some wrong position
+
+      const expectedCursorLine = 1 // "line2" is on line 1
+      const expectedCursorChar = 27 // length of "[line2](http://example.com)"
+
+      // This should FAIL with the current buggy implementation
+      assert.strictEqual(
+        editor.selection.start.line,
+        expectedCursorLine,
+        'Cursor should be on line 1 where line2 was replaced',
+      )
+      assert.strictEqual(
+        editor.selection.start.character,
+        expectedCursorChar,
+        'Cursor should be at end of [line2](http://example.com)',
+      )
+    })
   })
 })

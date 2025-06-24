@@ -24,7 +24,7 @@ Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the command pale
 - [1]: Markdown, MDX, R Markdown, and Quarto files are supported
 - [2]: Typically `http(s)` links, but also supports: _ftp(s), file, sftp, ssh, scp, mailto, tel, sms, callto, magnet, torrent, ed2k, thunder, dchub, dcpp, irc, ircs, news, nntp, git, svn, hg, data, blob, ipfs, ipns, chrome, chrome-extension, about, resource, moz-extension, ws, wss, vscode, cursor_
 - [3]: If one selection is within an existing Markdown link or image, or one selection spans multiple lines, the "Ctrl+V" command will replace the selection with the clipboard text as-is without adding Markdown link syntax, but the other two commands will add the Markdown link syntax (newlines will be replaced with spaces)
-- When no text is selected, "Paste Markdown Link" and "Paste Markdown Image" commands create a markdown link with empty brackets with cursor inside
+- When no text is selected, two non "Ctrl+V" commands create a markdown link with empty brackets with cursor inside
 - All three commands support multi-selection. Each selection is processed independently, as if it were a single selection
 - Compatible with VS Code 1.75.0 or higher and its derivatives like Cursor
 - This extension is not needed if you're using [Markdown All in One](https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one), which already includes this feature. Paste Markdown Link is intended as a lightweight alternative for users who don't need the additional functionality provided by Markdown All in One
@@ -36,7 +36,7 @@ Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the command pale
 
 ### 1.0.2
 
-Initial release
+- Initial release
 
 ### 1.0.3
 
@@ -51,3 +51,4 @@ Initial release
 
 - Change command names
 - If a selection is inside an existing Markdown link/image or spans multiple lines: the two non "Ctrl+V" commands will add the Markdown link syntax (newlines will be replaced with spaces)
+- Fix multi-selection (in document order and not) cursor placement issue
