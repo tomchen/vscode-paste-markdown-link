@@ -4,7 +4,8 @@ const URL_PATTERN =
   /^(https?|ftps?|file|sftp|ssh|scp|mailto|tel|sms|callto|magnet|torrent|ed2k|thunder|dchub|dcpp|irc|ircs|news|nntp|git|svn|hg|data|blob|ipfs|ipns|chrome|chrome-extension|about|resource|moz-extension|ws|wss|vscode|cursor):(\/\/)?[^\s]+$/
 
 // Pattern to detect existing markdown links and images
-const MARKDOWN_LINK_PATTERN = /!?\[([^\]]*)\]\(([^)]+)\)/g
+// Updated to handle nested structures like [![image](url)](link)
+const MARKDOWN_LINK_PATTERN = /!?\[(?:[^\[\]]|\[[^\]]*\])*\]\([^)]+\)/g
 
 function isSelectionValid(
   selection: vscode.Selection,

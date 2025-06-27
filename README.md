@@ -52,3 +52,7 @@ Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the command pale
 - Change command names
 - If a selection is inside an existing Markdown link/image or spans multiple lines: the two non "Ctrl+V" commands will add the Markdown link syntax (newlines will be replaced with spaces)
 - Fix multi-selection (in document order and not) cursor placement issue
+
+### 1.0.6
+
+- Fix nested markdown link/image detection issue

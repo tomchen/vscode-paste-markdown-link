@@ -89,7 +89,7 @@ suite('Extension Test Suite', () => {
 
   // Markdown link pattern tests
   test('Should detect existing markdown links correctly', () => {
-    const MARKDOWN_LINK_PATTERN = /!?\[([^\]]*)\]\(([^)]+)\)/g
+    const MARKDOWN_LINK_PATTERN = /!?\[(?:[^\[\]]|\[[^\]]*\])*\]\([^)]+\)/g
 
     // Test regular markdown links
     const regularLinkText =
@@ -118,6 +118,47 @@ suite('Extension Test Suite', () => {
     const noLinksText = 'This is just plain text without any links'
     const noMatches = Array.from(noLinksText.matchAll(MARKDOWN_LINK_PATTERN))
     assert.strictEqual(noMatches.length, 0, 'Should find no links')
+
+    // Test nested markdown structures (clickable images)
+    const nestedStructureText =
+      '[![image alt](https://example.com/image.png)](https://example.com)'
+    const nestedMatches = Array.from(
+      nestedStructureText.matchAll(MARKDOWN_LINK_PATTERN),
+    )
+    assert.strictEqual(
+      nestedMatches.length,
+      1,
+      'Should find the complete nested structure',
+    )
+
+    // Verify the match covers the entire nested structure
+    assert.strictEqual(
+      nestedMatches[0][0],
+      '[![image alt](https://example.com/image.png)](https://example.com)',
+      'Should match the full nested structure',
+    )
+
+    // Test that the match covers the outer URL (this is the key fix for the bug)
+    const outerUrlStart = nestedStructureText.lastIndexOf('https://example.com')
+    const outerUrlEnd = outerUrlStart + 'https://example.com'.length
+    const matchStart = nestedMatches[0].index
+    const matchEnd = matchStart + nestedMatches[0][0].length
+    assert.ok(
+      matchStart <= outerUrlStart && matchEnd >= outerUrlEnd,
+      'Match should cover the outer URL',
+    )
+
+    // Test complex nested case with multiple nested structures
+    const complexNestedText =
+      'Text [![img1](url1)](link1) more text [![img2](url2)](link2) end'
+    const complexMatches = Array.from(
+      complexNestedText.matchAll(MARKDOWN_LINK_PATTERN),
+    )
+    assert.strictEqual(
+      complexMatches.length,
+      2,
+      'Should find both complete nested structures',
+    )
   })
 
   // Command execution tests

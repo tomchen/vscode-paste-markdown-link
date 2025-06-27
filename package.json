@@ -3,7 +3,7 @@
   "publisher": "tomchen",
   "displayName": "Paste Markdown Link",
   "description": "Paste URL as formatted Markdown link when text is selected",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "icon": "icon.png",
   "engines": {
     "vscode": "^1.75.0"
@@ -73,7 +73,8 @@
     "lint": "eslint src",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "vsix": "vsce package"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
