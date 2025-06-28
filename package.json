@@ -68,7 +68,7 @@
     "onLanguage:quarto"
   ],
   "scripts": {
-    "vscode:prepublish": "bun run package",
+    "vscode:prepublish": "bun run compile:prod",
     "compile": "bun run check-types && bun run lint && node esbuild.js",
     "compile:prod": "bun run check-types && bun run lint && node esbuild.js --production",
     "watch": "npm-run-all -p watch:*",
