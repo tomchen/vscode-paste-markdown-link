@@ -7,6 +7,9 @@ const URL_PATTERN =
 // Updated to handle nested structures like [![image](url)](link)
 const MARKDOWN_LINK_PATTERN = /!?\[(?:[^\[\]]|\[[^\]]*\])*\]\([^)]+\)/g
 
+// Pattern to detect markdown images specifically
+const MARKDOWN_IMAGE_PATTERN = /!\[(?:[^\[\]]|\[[^\]]*\])*\]\([^)]+\)/g
+
 function isSelectionValid(
   selection: vscode.Selection,
   document: vscode.TextDocument,
@@ -18,23 +21,40 @@ function isSelectionValid(
 
   // Get the line text
   const lineText = document.lineAt(selection.start.line).text
+  const selectionStart = selection.start.character
+  const selectionEnd = selection.end.character
 
-  // Check if selection is inside an existing markdown link (or image)
-  const regex = new RegExp(
-    MARKDOWN_LINK_PATTERN.source,
-    MARKDOWN_LINK_PATTERN.flags,
-  )
-  let match: RegExpExecArray | null
-  while ((match = regex.exec(lineText)) !== null) {
-    const linkStart = match.index
-    const linkEnd = match.index + match[0].length
+  // Find all markdown links and images in the line
+  const allLinksAndImages = Array.from(lineText.matchAll(MARKDOWN_LINK_PATTERN))
+  const onlyImages = Array.from(lineText.matchAll(MARKDOWN_IMAGE_PATTERN))
 
-    // Check if selection overlaps with the markdown link (or image)
-    if (
-      selection.start.character < linkEnd &&
-      selection.end.character > linkStart
-    ) {
-      return false
+  // Check if selection contains any regular markdown links (not images)
+  for (const match of allLinksAndImages) {
+    const linkStart = match.index!
+    const linkEnd = match.index! + match[0].length
+
+    // If this is not an image (doesn't start with !)
+    if (!match[0].startsWith('!')) {
+      // Check if selection overlaps with this regular link
+      if (selectionStart < linkEnd && selectionEnd > linkStart) {
+        return false // Selection contains a regular link, not allowed
+      }
+    }
+  }
+
+  // Check for partial overlaps with markdown images
+  for (const match of onlyImages) {
+    const imageStart = match.index!
+    const imageEnd = match.index! + match[0].length
+
+    // Check if there's any overlap with the image
+    const hasOverlap = selectionStart < imageEnd && selectionEnd > imageStart
+    const completelyContains =
+      selectionStart <= imageStart && selectionEnd >= imageEnd
+
+    // Allow only if selection completely contains the image, disallow any other overlap
+    if (hasOverlap && !completelyContains) {
+      return false // Any overlap that doesn't completely contain the image is not allowed
     }
   }
 

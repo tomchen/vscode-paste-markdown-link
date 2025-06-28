@@ -792,4 +792,286 @@ suite('Extension Test Suite', () => {
       )
     })
   })
+
+  // Tests for markdown image selections
+  suite('Markdown Image Selection Tests', () => {
+    test('Should create markdown link when selecting text with complete markdown image - case 1', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'Hello![TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select the entire text "Hello![TEXT](https://example.com)"
+      const selection = new vscode.Selection(0, 0, 0, 33)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '[Hello![TEXT](https://example.com)](https://example.com/pasted)',
+        'Should create markdown link wrapping the text with image',
+      )
+    })
+
+    test('Should create markdown link when selecting complete markdown image - case 2', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![Open VSX Version](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select the entire image "![Open VSX Version](https://example.com)"
+      const selection = new vscode.Selection(0, 0, 0, 40)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '[![Open VSX Version](https://example.com)](https://example.com/pasted)',
+        'Should create markdown link wrapping the complete image',
+      )
+    })
+
+    test('Should create markdown link when selecting text with multiple complete markdown images - case 3', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![TEXT](https://example.com)sas![TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select the entire text "![TEXT](https://example.com)sas![TEXT](https://example.com)"
+      // Length: 59 characters (verified by debug output)
+      const selection = new vscode.Selection(0, 0, 0, 59)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '[![TEXT](https://example.com)sas![TEXT](https://example.com)](https://example.com/pasted)',
+        'Should create markdown link wrapping text with multiple images',
+      )
+    })
+
+    test('Should NOT create markdown link when selection contains regular markdown link - case 4', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![TEXT](https://example.com)sas[TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select the entire text "![TEXT](https://example.com)sas[TEXT](https://example.com)"
+      // Length: 58 characters (verified by debug output)
+      const selection = new vscode.Selection(0, 0, 0, 58)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        'https://example.com/pasted',
+        'Should paste URL as-is when selection contains regular markdown link',
+      )
+    })
+
+    test('Should NOT create markdown link when selection partially overlaps markdown image - case 5', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![TEXT](https://example.com)sas![TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select "![TEXT](https://example.com)sas![TE" - partial overlap with second image
+      // Length: 35 characters (verified by debug output)
+      const selection = new vscode.Selection(0, 0, 0, 35)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        'https://example.com/pastedXT](https://example.com)',
+        'Should paste URL as-is when selection partially overlaps markdown image',
+      )
+    })
+
+    // Tests for partial selections within markdown images
+    test('Should NOT create markdown link when selecting URL part within markdown image - case 6', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select "https://example.com" inside the image (positions 8-27, end exclusive)
+      const selection = new vscode.Selection(0, 8, 0, 27)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '![TEXT](https://example.com/pasted)',
+        'Should paste URL as-is when selecting URL part within markdown image',
+      )
+    })
+
+    test('Should NOT create markdown link when selecting partial text within markdown image - case 7', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select "XT](htt" spanning across text and URL
+      const selection = new vscode.Selection(0, 4, 0, 11)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '![TEhttps://example.com/pastedps://example.com)',
+        'Should paste URL as-is when selecting partial text within markdown image',
+      )
+    })
+
+    test('Should NOT create markdown link when selecting image prefix within markdown image - case 8', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select "![" at the beginning
+      const selection = new vscode.Selection(0, 0, 0, 2)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        'https://example.com/pastedTEXT](https://example.com)',
+        'Should paste URL as-is when selecting image prefix within markdown image',
+      )
+    })
+
+    test('Should NOT create markdown link when selecting bracket part within markdown image - case 9', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select "](" between text and URL
+      const selection = new vscode.Selection(0, 6, 0, 8)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '![TEXThttps://example.com/pastedhttps://example.com)',
+        'Should paste URL as-is when selecting bracket part within markdown image',
+      )
+    })
+
+    test('Should NOT create markdown link when selecting partial alt text within markdown image - case 10', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select "TEX" within alt text
+      const selection = new vscode.Selection(0, 2, 0, 5)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '![https://example.com/pastedT](https://example.com)',
+        'Should paste URL as-is when selecting partial alt text within markdown image',
+      )
+    })
+
+    test('Should NOT create markdown link when selecting full alt text within markdown image - case 11', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '![TEXT](https://example.com)',
+        language: 'markdown',
+      })
+
+      const editor = await vscode.window.showTextDocument(document)
+      // Select "TEXT" (full alt text but not the whole image)
+      const selection = new vscode.Selection(0, 2, 0, 6)
+      editor.selection = selection
+
+      // Set clipboard to URL
+      await vscode.env.clipboard.writeText('https://example.com/pasted')
+
+      // Execute normal paste command
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      const updatedContent = document.getText()
+      assert.strictEqual(
+        updatedContent,
+        '![https://example.com/pasted](https://example.com)',
+        'Should paste URL as-is when selecting full alt text within markdown image',
+      )
+    })
+  })
 })

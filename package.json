@@ -3,11 +3,15 @@
   "publisher": "tomchen",
   "displayName": "Paste Markdown Link",
   "description": "Paste URL as formatted Markdown link when text is selected",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "icon": "icon.png",
   "engines": {
     "vscode": "^1.75.0"
   },
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ],
   "categories": [
     "Programming Languages",
     "Formatters",
@@ -17,7 +21,12 @@
     "markdown",
     "link",
     "paste",
-    "url"
+    "url",
+    "syntax",
+    "format",
+    "copy",
+    "clipboard",
+    "image"
   ],
   "bugs": {
     "url": "https://github.com/tomchen/vscode-paste-markdown-link/issues"
@@ -61,10 +70,10 @@
   "scripts": {
     "vscode:prepublish": "bun run package",
     "compile": "bun run check-types && bun run lint && node esbuild.js",
+    "compile:prod": "bun run check-types && bun run lint && node esbuild.js --production",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "bun run check-types && bun run lint && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "bun run compile-tests && bun run compile && bun run lint",
@@ -85,9 +94,9 @@
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.25.5",
-    "eslint": "^9.29.0",
+    "eslint": "^9.30.0",
     "npm-run-all": "^4.1.5",
-    "prettier": "^3.6.0",
+    "prettier": "^3.6.2",
     "typescript": "^5.8.3"
   }
 }

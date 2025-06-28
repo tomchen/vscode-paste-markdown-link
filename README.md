@@ -9,6 +9,8 @@ A simple VS Code extension that helps you create formatted Markdown links quickl
 3. Press <kbd>Ctrl</kbd> + <kbd>V</kbd> (Windows, Linux) or <kbd>Cmd</kbd> + <kbd>V</kbd> (macOS)
 4. The selected text will be converted into a Markdown link `[TEXT] (URL)` with the URL
 
+[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/tomchen.paste-markdown-link?label=Visual%20Studio%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=tomchen.paste-markdown-link) [![Open VSX Version](https://img.shields.io/open-vsx/v/tomchen/paste-markdown-link?label=Open%20VSX&color=%23a60ee5)](https://open-vsx.org/extension/tomchen/paste-markdown-link) [![Actions Status](https://github.com/tomchen/vscode-paste-markdown-link/workflows/Test/badge.svg)](https://github.com/tomchen/vscode-paste-markdown-link/actions) [![License](https://img.shields.io/github/license/tomchen/vscode-paste-markdown-link)](https://github.com/tomchen/vscode-paste-markdown-link/blob/main/LICENSE)
+
 ## Advanced Usage
 
 Three commands are available:
@@ -56,3 +58,7 @@ Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the command pale
 ### 1.0.6
 
 - Fix nested markdown link/image detection issue
+
+### 1.1.0
+
+- Fix cases when markdown image is selected
