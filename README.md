@@ -2,6 +2,8 @@
 
 A simple VS Code extension that helps you create formatted Markdown links quickly. When you have text selected and paste a URL, it automatically formats it as a Markdown link `[TEXT] (URL)`.
 
+NOTE: VS Code now has [built-in support](https://code.visualstudio.com/updates/v1_86#_paste-a-url-to-automatically-create-a-markdown-link) for pasting a URL to automatically create a Markdown link (`markdown.editor.pasteUrlAsFormattedLink.enabled`), and the feature is on (`smartWithSelection`) by default. However, this extension provides stricter and smarter checks for URL validity and Markdown link syntax, and has support for many URL protocols and Markdown image links.
+
 ## Usage
 
 1. Select some text in a Markdown file <sup>[1]</sup>
@@ -31,7 +33,7 @@ Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the command pale
 - Compatible with VS Code 1.75.0 or higher and its derivatives like Cursor
 - This extension is not needed if you're using [Markdown All in One](https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one), which already includes this feature. Paste Markdown Link is intended as a lightweight alternative for users who don't need the additional functionality provided by Markdown All in One
 - No user settings are available
-- No runtime (bundled, non-dev) dependencies. It's minimalistic yet includes comprehensive tests and a CI build pipeline targeting both the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=tomchen.paste-markdown-link) and the [Open VSX Registry](https://open-vsx.org/extension/tomchen/paste-markdown-link). It can serve as a template for other extensions
+- No runtime (bundled, non-dev) dependencies. It's minimalistic yet includes tests and a CI build pipeline targeting both the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=tomchen.paste-markdown-link) and the [Open VSX Registry](https://open-vsx.org/extension/tomchen/paste-markdown-link). It can serve as a template for other extensions
 - MIT License
 
 ## Release Notes
@@ -62,3 +64,12 @@ Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open the command pale
 ### 1.1.0
 
 - Fix cases when markdown image is selected
+- No need to install separately for WSL (added `extensionKind: ["ui", "workspace"]`)
+
+### 1.2.0
+
+- Detect markdown links/images with balanced parentheses in URLs (e.g. `[wiki] (https://en.wikipedia.org/wiki/Foo_(bar))`)
+- Detect reference-style markdown links/images (`[text][id]`, `![img][ref]`, `[text][]`)
+- Ignore markdown link syntax inside inline code spans (backticks)
+- Fix same-line multi-selection cursor positioning
+- Fix keybinding language ID regex for MDX

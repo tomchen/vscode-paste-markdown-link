@@ -1,10 +1,19 @@
 import * as assert from 'assert'
 import * as vscode from 'vscode'
+import {
+  URL_PATTERN,
+  MARKDOWN_INLINE_PATTERN,
+  MARKDOWN_REF_PATTERN,
+  maskCodeSpans,
+  isLineSelectionValid,
+  buildReplacementText,
+} from '../extension.js'
 
 suite('Extension Test Suite', () => {
   vscode.window.showInformationMessage('Start all tests.')
 
-  // Basic extension tests
+  // ─── Basic Extension Tests ──────────────────────────────────────────
+
   test('Extension should be present', () => {
     assert.ok(true, 'Extension test environment is working')
   })
@@ -46,7 +55,6 @@ suite('Extension Test Suite', () => {
     )
   })
 
-  // File type support tests
   test('Should handle supported file types', async () => {
     const supportedLanguages = ['markdown', 'mdx', 'rmd', 'quarto']
 
@@ -61,247 +69,6 @@ suite('Extension Test Suite', () => {
     }
   })
 
-  // URL pattern tests
-  test('Should test URL pattern matching', () => {
-    const URL_PATTERN =
-      /^(https?|ftps?|file|sftp|ssh|scp|mailto|tel|sms|callto|magnet|torrent|ed2k|thunder|dchub|dcpp|irc|ircs|news|nntp|git|svn|hg|data|blob|ipfs|ipns|chrome|chrome-extension|about|resource|moz-extension|ws|wss|vscode|cursor):(\/\/)?[^\s]+$/
-
-    // Valid URLs
-    const validUrls = [
-      'https://example.com',
-      'http://example.com',
-      'ftp://example.com',
-      'mailto:test@example.com',
-      'tel:+1234567890',
-      'file:///path/to/file',
-    ]
-
-    validUrls.forEach((url) => {
-      assert.ok(URL_PATTERN.test(url), `Should match ${url}`)
-    })
-
-    // Invalid URLs
-    const invalidUrls = ['not-a-url', 'example.com']
-    invalidUrls.forEach((url) => {
-      assert.ok(!URL_PATTERN.test(url), `Should not match ${url}`)
-    })
-  })
-
-  // Markdown link pattern tests
-  test('Should detect existing markdown links correctly', () => {
-    const MARKDOWN_LINK_PATTERN = /!?\[(?:[^\[\]]|\[[^\]]*\])*\]\([^)]+\)/g
-
-    // Test regular markdown links
-    const regularLinkText =
-      'This is a [link text](https://example.com) in a sentence'
-    const regularMatches = Array.from(
-      regularLinkText.matchAll(MARKDOWN_LINK_PATTERN),
-    )
-    assert.strictEqual(regularMatches.length, 1, 'Should find one regular link')
-
-    // Test image markdown links
-    const imageLinkText =
-      'This is an ![image alt](https://example.com/image.png) in a sentence'
-    const imageMatches = Array.from(
-      imageLinkText.matchAll(MARKDOWN_LINK_PATTERN),
-    )
-    assert.strictEqual(imageMatches.length, 1, 'Should find one image link')
-
-    // Test multiple links in one line
-    const multipleLinksText = '[link1](url1) and [link2](url2) and ![img](url3)'
-    const multipleMatches = Array.from(
-      multipleLinksText.matchAll(MARKDOWN_LINK_PATTERN),
-    )
-    assert.strictEqual(multipleMatches.length, 3, 'Should find three links')
-
-    // Test no links
-    const noLinksText = 'This is just plain text without any links'
-    const noMatches = Array.from(noLinksText.matchAll(MARKDOWN_LINK_PATTERN))
-    assert.strictEqual(noMatches.length, 0, 'Should find no links')
-
-    // Test nested markdown structures (clickable images)
-    const nestedStructureText =
-      '[![image alt](https://example.com/image.png)](https://example.com)'
-    const nestedMatches = Array.from(
-      nestedStructureText.matchAll(MARKDOWN_LINK_PATTERN),
-    )
-    assert.strictEqual(
-      nestedMatches.length,
-      1,
-      'Should find the complete nested structure',
-    )
-
-    // Verify the match covers the entire nested structure
-    assert.strictEqual(
-      nestedMatches[0][0],
-      '[![image alt](https://example.com/image.png)](https://example.com)',
-      'Should match the full nested structure',
-    )
-
-    // Test that the match covers the outer URL (this is the key fix for the bug)
-    const outerUrlStart = nestedStructureText.lastIndexOf('https://example.com')
-    const outerUrlEnd = outerUrlStart + 'https://example.com'.length
-    const matchStart = nestedMatches[0].index
-    const matchEnd = matchStart + nestedMatches[0][0].length
-    assert.ok(
-      matchStart <= outerUrlStart && matchEnd >= outerUrlEnd,
-      'Match should cover the outer URL',
-    )
-
-    // Test complex nested case with multiple nested structures
-    const complexNestedText =
-      'Text [![img1](url1)](link1) more text [![img2](url2)](link2) end'
-    const complexMatches = Array.from(
-      complexNestedText.matchAll(MARKDOWN_LINK_PATTERN),
-    )
-    assert.strictEqual(
-      complexMatches.length,
-      2,
-      'Should find both complete nested structures',
-    )
-  })
-
-  // Command execution tests
-  test('Should execute commands without error', async () => {
-    const document = await vscode.workspace.openTextDocument({
-      content: 'Selected text here',
-      language: 'markdown',
-    })
-
-    const editor = await vscode.window.showTextDocument(document)
-    const selection = new vscode.Selection(0, 0, 0, 14)
-    editor.selection = selection
-
-    const commands = [
-      'paste-markdown-link.paste',
-      'paste-markdown-link.paste-nocheck',
-      'paste-markdown-link.paste-img',
-    ]
-
-    for (const command of commands) {
-      try {
-        await vscode.commands.executeCommand(command)
-        assert.ok(true, `${command} executed without throwing error`)
-      } catch (error) {
-        // It's okay if it fails due to clipboard access in test environment
-        assert.ok(
-          error instanceof Error,
-          `Should throw a proper error if ${command} fails`,
-        )
-      }
-    }
-  })
-
-  test('Should handle edge cases gracefully', async () => {
-    // Test with no active editor
-    await vscode.commands.executeCommand('workbench.action.closeAllEditors')
-    try {
-      await vscode.commands.executeCommand('paste-markdown-link.paste')
-      assert.ok(true, 'Command should handle no active editor gracefully')
-    } catch (error) {
-      assert.ok(
-        error instanceof Error,
-        'Should throw a proper error if it fails',
-      )
-    }
-
-    // Test with no selection
-    const document = await vscode.workspace.openTextDocument({
-      content: 'Text without selection',
-      language: 'markdown',
-    })
-    const editor = await vscode.window.showTextDocument(document)
-    const position = new vscode.Position(0, 0)
-    editor.selection = new vscode.Selection(position, position)
-
-    try {
-      await vscode.commands.executeCommand('paste-markdown-link.paste')
-      assert.ok(true, 'Command should handle no selection gracefully')
-    } catch (error) {
-      assert.ok(
-        error instanceof Error,
-        'Should throw a proper error if it fails',
-      )
-    }
-  })
-
-  // Selection validation tests
-  test('Should handle different selection types', async () => {
-    const document = await vscode.workspace.openTextDocument({
-      content:
-        'Valid text\n[link text](https://example.com)\nAnother text\nMulti\nline selection',
-      language: 'markdown',
-    })
-
-    const editor = await vscode.window.showTextDocument(document)
-
-    // Test valid selection
-    editor.selection = new vscode.Selection(0, 0, 0, 10)
-    try {
-      await vscode.commands.executeCommand('paste-markdown-link.paste')
-      assert.ok(true, 'Command should handle valid selection')
-    } catch (error) {
-      assert.ok(
-        error instanceof Error,
-        'Should throw a proper error if it fails',
-      )
-    }
-
-    // Test selection inside existing link
-    editor.selection = new vscode.Selection(1, 1, 1, 10)
-    try {
-      await vscode.commands.executeCommand('paste-markdown-link.paste')
-      assert.ok(true, 'Command should handle selection inside link gracefully')
-    } catch (error) {
-      assert.ok(
-        error instanceof Error,
-        'Should throw a proper error if it fails',
-      )
-    }
-
-    // Test multi-line selection
-    editor.selection = new vscode.Selection(3, 0, 4, 6)
-    try {
-      await vscode.commands.executeCommand('paste-markdown-link.paste')
-      assert.ok(true, 'Command should handle multi-line selection gracefully')
-    } catch (error) {
-      assert.ok(
-        error instanceof Error,
-        'Should throw a proper error if it fails',
-      )
-    }
-  })
-
-  // Multi-selection tests
-  test('Should handle multi-selection correctly', async () => {
-    const document = await vscode.workspace.openTextDocument({
-      content: 'First selection\nSecond selection\nThird selection',
-      language: 'markdown',
-    })
-
-    const editor = await vscode.window.showTextDocument(document)
-
-    const selections = [
-      new vscode.Selection(0, 0, 0, 15),
-      new vscode.Selection(1, 0, 1, 16),
-      new vscode.Selection(2, 0, 2, 15),
-    ]
-    editor.selections = selections
-
-    assert.strictEqual(editor.selections.length, 3, 'Should have 3 selections')
-
-    try {
-      await vscode.commands.executeCommand('paste-markdown-link.paste')
-      assert.ok(true, 'Command should handle multi-selection')
-    } catch (error) {
-      assert.ok(
-        error instanceof Error,
-        'Should throw a proper error if it fails',
-      )
-    }
-  })
-
-  // Extension metadata tests
   test('Extension should have correct metadata', () => {
     const extension = vscode.extensions.getExtension(
       'tomchen.paste-markdown-link',
@@ -309,492 +76,784 @@ suite('Extension Test Suite', () => {
     if (extension) {
       const packageJson = extension.packageJSON
 
-      assert.strictEqual(
-        packageJson.name,
-        'paste-markdown-link',
-        'Extension name should match',
-      )
-      assert.strictEqual(
-        packageJson.displayName,
-        'Paste Markdown Link',
-        'Display name should match',
-      )
-      assert.ok(packageJson.description, 'Should have a description')
-      assert.ok(packageJson.version, 'Should have a version')
-      assert.ok(
-        packageJson.engines.vscode,
-        'Should specify VS Code engine version',
-      )
-      assert.ok(
-        Array.isArray(packageJson.categories),
-        'Should have categories array',
-      )
-      assert.ok(
-        Array.isArray(packageJson.keywords),
-        'Should have keywords array',
-      )
+      assert.strictEqual(packageJson.name, 'paste-markdown-link')
+      assert.strictEqual(packageJson.displayName, 'Paste Markdown Link')
+      assert.ok(packageJson.description)
+      assert.ok(packageJson.version)
+      assert.ok(packageJson.engines.vscode)
+      assert.ok(Array.isArray(packageJson.categories))
+      assert.ok(Array.isArray(packageJson.keywords))
     } else {
       assert.fail('Extension not found')
     }
   })
 
-  // Cursor positioning tests
-  suite('Cursor Positioning Tests', () => {
-    test('Should position cursor at end of markdown link when text is selected and URL is pasted', async () => {
-      const document = await vscode.workspace.openTextDocument({
-        content: 'abc',
-        language: 'markdown',
+  // ─── Pure Function Tests: URL_PATTERN ─────────────────────────────
+
+  suite('URL_PATTERN', () => {
+    test('Should match valid URLs', () => {
+      const validUrls = [
+        'https://example.com',
+        'http://example.com',
+        'ftp://example.com',
+        'mailto:test@example.com',
+        'tel:+1234567890',
+        'file:///path/to/file',
+        'vscode://extension/id',
+        'cursor://settings',
+        'ws://localhost:8080',
+        'wss://example.com/socket',
+      ]
+      validUrls.forEach((url) => {
+        assert.ok(URL_PATTERN.test(url), `Should match ${url}`)
       })
+    })
 
-      const editor = await vscode.window.showTextDocument(document)
-      const selection = new vscode.Selection(0, 0, 0, 3)
-      editor.selection = selection
-
-      // Test the cursor positioning logic directly
-      const selectedText = document.getText(selection)
-      const clipboardText = 'http://example.com'
-      const replacementText = `[${selectedText}](${clipboardText})`
-
-      await editor.edit((editBuilder) => {
-        editBuilder.replace(selection, replacementText)
+    test('Should not match invalid URLs', () => {
+      const invalidUrls = [
+        'not-a-url',
+        'example.com',
+        '',
+        'just text',
+        '://missing-protocol',
+      ]
+      invalidUrls.forEach((url) => {
+        assert.ok(!URL_PATTERN.test(url), `Should not match ${url}`)
       })
+    })
+  })
 
-      // Calculate expected cursor position
-      const startChar = selection.start.character
-      const replacementLines = replacementText.split('\n')
-      const lastLine = selection.start.line + replacementLines.length - 1
-      const lastLineLength =
-        replacementLines[replacementLines.length - 1].length
-      const expectedPosition = new vscode.Position(
-        lastLine,
-        startChar + lastLineLength,
-      )
+  // ─── Pure Function Tests: MARKDOWN_INLINE_PATTERN ─────────────────
 
-      editor.selection = new vscode.Selection(
-        expectedPosition,
-        expectedPosition,
-      )
+  suite('MARKDOWN_INLINE_PATTERN', () => {
+    test('Should match regular inline links', () => {
+      const text = 'This is a [link](https://example.com) in a sentence'
+      const matches = Array.from(text.matchAll(MARKDOWN_INLINE_PATTERN))
+      assert.strictEqual(matches.length, 1)
+      assert.strictEqual(matches[0][0], '[link](https://example.com)')
+    })
 
-      // Verify content and cursor position
-      const updatedContent = document.getText()
+    test('Should match inline images', () => {
+      const text = 'This is an ![image](https://example.com/img.png) here'
+      const matches = Array.from(text.matchAll(MARKDOWN_INLINE_PATTERN))
+      assert.strictEqual(matches.length, 1)
+      assert.strictEqual(matches[0][0], '![image](https://example.com/img.png)')
+    })
+
+    test('Should match multiple links in one line', () => {
+      const text = '[a](url1) and [b](url2) and ![c](url3)'
+      const matches = Array.from(text.matchAll(MARKDOWN_INLINE_PATTERN))
+      assert.strictEqual(matches.length, 3)
+    })
+
+    test('Should match nested structures (clickable images)', () => {
+      const text = '[![alt](https://example.com/img.png)](https://example.com)'
+      const matches = Array.from(text.matchAll(MARKDOWN_INLINE_PATTERN))
+      assert.strictEqual(matches.length, 1)
+      assert.strictEqual(matches[0][0], text)
+    })
+
+    test('Should handle URLs with balanced parentheses', () => {
+      const text = '[wiki](https://en.wikipedia.org/wiki/Foo_(bar))'
+      const matches = Array.from(text.matchAll(MARKDOWN_INLINE_PATTERN))
+      assert.strictEqual(matches.length, 1)
       assert.strictEqual(
-        updatedContent,
-        '[abc](http://example.com)',
-        'Should create markdown link',
-      )
-      assert.strictEqual(
-        editor.selection.start.character,
-        expectedPosition.character,
-        'Cursor should be at end',
+        matches[0][0],
+        '[wiki](https://en.wikipedia.org/wiki/Foo_(bar))',
       )
     })
 
-    test('Should position cursor at end of markdown image when text is selected and image URL is pasted', async () => {
-      const document = await vscode.workspace.openTextDocument({
-        content: 'alt text',
-        language: 'markdown',
-      })
-
-      const editor = await vscode.window.showTextDocument(document)
-      const selection = new vscode.Selection(0, 0, 0, 9)
-      editor.selection = selection
-
-      const selectedText = document.getText(selection)
-      const clipboardText = 'https://example.com/image.jpg'
-      const replacementText = `![${selectedText}](${clipboardText})`
-
-      await editor.edit((editBuilder) => {
-        editBuilder.replace(selection, replacementText)
-      })
-
-      const startChar = selection.start.character
-      const replacementLines = replacementText.split('\n')
-      const lastLine = selection.start.line + replacementLines.length - 1
-      const lastLineLength =
-        replacementLines[replacementLines.length - 1].length
-      const expectedPosition = new vscode.Position(
-        lastLine,
-        startChar + lastLineLength,
-      )
-
-      editor.selection = new vscode.Selection(
-        expectedPosition,
-        expectedPosition,
-      )
-
-      const updatedContent = document.getText()
+    test('Should handle image URLs with balanced parentheses', () => {
+      const text = '![img](https://example.com/image_(1).png)'
+      const matches = Array.from(text.matchAll(MARKDOWN_INLINE_PATTERN))
+      assert.strictEqual(matches.length, 1)
       assert.strictEqual(
-        updatedContent,
-        '![alt text](https://example.com/image.jpg)',
-        'Should create markdown image',
-      )
-      assert.strictEqual(
-        editor.selection.start.character,
-        expectedPosition.character,
-        'Cursor should be at end',
+        matches[0][0],
+        '![img](https://example.com/image_(1).png)',
       )
     })
 
-    test('Should position cursor inside brackets for forced mode with no selection', async () => {
+    test('Should find no links in plain text', () => {
+      const text = 'This is just plain text without any links'
+      const matches = Array.from(text.matchAll(MARKDOWN_INLINE_PATTERN))
+      assert.strictEqual(matches.length, 0)
+    })
+
+    test('Should match complex nested case with multiple nested structures', () => {
+      const text =
+        'Text [![img1](url1)](link1) more text [![img2](url2)](link2) end'
+      const matches = Array.from(text.matchAll(MARKDOWN_INLINE_PATTERN))
+      assert.strictEqual(matches.length, 2)
+    })
+  })
+
+  // ─── Pure Function Tests: MARKDOWN_REF_PATTERN ────────────────────
+
+  suite('MARKDOWN_REF_PATTERN', () => {
+    test('Should match reference-style links', () => {
+      const text = 'This is a [link][ref-id] in a sentence'
+      const matches = Array.from(text.matchAll(MARKDOWN_REF_PATTERN))
+      assert.strictEqual(matches.length, 1)
+      assert.strictEqual(matches[0][0], '[link][ref-id]')
+    })
+
+    test('Should match reference-style images', () => {
+      const text = 'This is an ![image][img-ref] in a sentence'
+      const matches = Array.from(text.matchAll(MARKDOWN_REF_PATTERN))
+      assert.strictEqual(matches.length, 1)
+      assert.strictEqual(matches[0][0], '![image][img-ref]')
+    })
+
+    test('Should match collapsed reference links', () => {
+      const text = 'This is a [link][] in a sentence'
+      const matches = Array.from(text.matchAll(MARKDOWN_REF_PATTERN))
+      assert.strictEqual(matches.length, 1)
+      assert.strictEqual(matches[0][0], '[link][]')
+    })
+
+    test('Should match multiple reference links', () => {
+      const text = '[a][1] and [b][2] and ![c][3]'
+      const matches = Array.from(text.matchAll(MARKDOWN_REF_PATTERN))
+      assert.strictEqual(matches.length, 3)
+    })
+
+    test('Should not match plain bracketed text without second brackets', () => {
+      const text = '[just text] without ref'
+      const matches = Array.from(text.matchAll(MARKDOWN_REF_PATTERN))
+      assert.strictEqual(matches.length, 0)
+    })
+  })
+
+  // ─── Pure Function Tests: isLineSelectionValid ────────────────────
+
+  suite('isLineSelectionValid', () => {
+    test('Should return true for plain text with no links', () => {
+      assert.ok(isLineSelectionValid('Hello world', 0, 5))
+    })
+
+    test('Should return false when selection overlaps regular inline link', () => {
+      const line = 'See [link](url) here'
+      assert.ok(!isLineSelectionValid(line, 3, 8)) // overlaps "[link"
+      assert.ok(!isLineSelectionValid(line, 0, 20)) // contains entire line with link
+      assert.ok(!isLineSelectionValid(line, 5, 10)) // inside link text
+    })
+
+    test('Should return false when selection overlaps regular reference link', () => {
+      const line = 'See [link][ref] here'
+      assert.ok(!isLineSelectionValid(line, 3, 8)) // overlaps "[link"
+      assert.ok(!isLineSelectionValid(line, 5, 12)) // inside link
+    })
+
+    test('Should return true when selection completely contains an image', () => {
+      const line = '![img](url) end'
+      assert.ok(isLineSelectionValid(line, 0, 11))
+    })
+
+    test('Should return false when selection partially overlaps an image', () => {
+      const line = '![img](url) end'
+      assert.ok(!isLineSelectionValid(line, 0, 5))
+      assert.ok(!isLineSelectionValid(line, 3, 8))
+      assert.ok(!isLineSelectionValid(line, 7, 14))
+    })
+
+    test('Should return false when selection partially overlaps reference image', () => {
+      const line = '![img][ref] end'
+      assert.ok(!isLineSelectionValid(line, 0, 5))
+      assert.ok(!isLineSelectionValid(line, 3, 8))
+    })
+
+    test('Should return true when selection completely contains reference image', () => {
+      const line = '![img][ref] end'
+      assert.ok(isLineSelectionValid(line, 0, 11))
+    })
+
+    test('Should handle inline links with balanced parentheses in URL', () => {
+      const line = 'See [wiki](https://en.wikipedia.org/wiki/Foo_(bar)) here'
+      // Selection inside the link → invalid
+      assert.ok(!isLineSelectionValid(line, 5, 15))
+      // Selection outside the link → valid
+      assert.ok(isLineSelectionValid(line, 52, 56))
+    })
+
+    test('Should handle text between links', () => {
+      const line = '[a](url1) text [b](url2)'
+      assert.ok(isLineSelectionValid(line, 10, 14))
+    })
+
+    test('Should handle selection that completely contains multiple images', () => {
+      const line = '![a](u1) text ![b](u2)'
+      assert.ok(isLineSelectionValid(line, 0, 22))
+    })
+
+    test('Should allow selection containing link syntax inside code span', () => {
+      const line = 'select `[TEXT](URL)` here'
+      // The whole thing including backticks
+      assert.ok(isLineSelectionValid(line, 0, 20))
+      // Just the code span
+      assert.ok(isLineSelectionValid(line, 7, 20))
+      // Text around code span
+      assert.ok(isLineSelectionValid(line, 0, 24))
+    })
+
+    test('Should allow selection of code span with reference link syntax', () => {
+      const line = 'see `[link][ref]` end'
+      assert.ok(isLineSelectionValid(line, 0, 17))
+    })
+
+    test('Should still reject real link outside code span', () => {
+      const line = '`code` [link](url) end'
+      assert.ok(!isLineSelectionValid(line, 5, 20))
+    })
+
+    test('Should handle double-backtick code spans', () => {
+      const line = 'text ``[link](url)`` end'
+      assert.ok(isLineSelectionValid(line, 0, 20))
+    })
+  })
+
+  // ─── Pure Function Tests: maskCodeSpans ───────────────────────────
+
+  suite('maskCodeSpans', () => {
+    test('Should mask single-backtick code spans', () => {
+      const result = maskCodeSpans('text `[link](url)` end')
+      assert.ok(!result.includes('[link]'))
+      assert.strictEqual(result.length, 'text `[link](url)` end'.length)
+    })
+
+    test('Should mask double-backtick code spans', () => {
+      const result = maskCodeSpans('text ``[link](url)`` end')
+      assert.ok(!result.includes('[link]'))
+      assert.strictEqual(result.length, 'text ``[link](url)`` end'.length)
+    })
+
+    test('Should preserve text outside code spans', () => {
+      const result = maskCodeSpans('before `code` [link](url)')
+      assert.ok(result.includes('[link](url)'))
+    })
+
+    test('Should handle multiple code spans', () => {
+      const result = maskCodeSpans('`[a](b)` text `[c](d)`')
+      assert.ok(!result.includes('[a]'))
+      assert.ok(!result.includes('[c]'))
+    })
+
+    test('Should return unchanged text without backticks', () => {
+      const text = 'no code spans here [link](url)'
+      assert.strictEqual(maskCodeSpans(text), text)
+    })
+  })
+
+  // ─── Pure Function Tests: buildReplacementText ────────────────────
+
+  suite('buildReplacementText', () => {
+    test('Non-forced: valid selection + URL → markdown link', () => {
+      assert.strictEqual(
+        buildReplacementText('text', 'https://example.com', true, false, false),
+        '[text](https://example.com)',
+      )
+    })
+
+    test('Non-forced: valid selection + non-URL → paste as-is', () => {
+      assert.strictEqual(
+        buildReplacementText('text', 'not a url', true, false, false),
+        'not a url',
+      )
+    })
+
+    test('Non-forced: invalid selection + URL → paste as-is', () => {
+      assert.strictEqual(
+        buildReplacementText(
+          'text',
+          'https://example.com',
+          false,
+          false,
+          false,
+        ),
+        'https://example.com',
+      )
+    })
+
+    test('Non-forced: no selection + URL → paste as-is', () => {
+      assert.strictEqual(
+        buildReplacementText('', 'https://example.com', true, false, false),
+        'https://example.com',
+      )
+    })
+
+    test('Forced: no selection → placeholder link', () => {
+      assert.strictEqual(
+        buildReplacementText('', 'clipboard', true, true, false),
+        '[](clipboard)',
+      )
+    })
+
+    test('Forced image: no selection → placeholder image', () => {
+      assert.strictEqual(
+        buildReplacementText('', 'clipboard', true, true, true),
+        '![](clipboard)',
+      )
+    })
+
+    test('Forced: with selection → link', () => {
+      assert.strictEqual(
+        buildReplacementText('text', 'clipboard', true, true, false),
+        '[text](clipboard)',
+      )
+    })
+
+    test('Forced image: with selection → image', () => {
+      assert.strictEqual(
+        buildReplacementText('alt', 'https://img.png', true, true, true),
+        '![alt](https://img.png)',
+      )
+    })
+
+    test('Forced: multi-line selection → newlines replaced with spaces', () => {
+      assert.strictEqual(
+        buildReplacementText('line1\nline2\nline3', 'url', true, true, false),
+        '[line1 line2 line3](url)',
+      )
+    })
+
+    test('Forced image: multi-line selection → newlines replaced with spaces', () => {
+      assert.strictEqual(
+        buildReplacementText('alt\ntext', 'url', true, true, true),
+        '![alt text](url)',
+      )
+    })
+  })
+
+  // ─── Edge Cases ───────────────────────────────────────────────────
+
+  suite('Edge Cases', () => {
+    test('Should handle no active editor gracefully', async () => {
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors')
+      try {
+        await vscode.commands.executeCommand('paste-markdown-link.paste')
+        assert.ok(true, 'Command should handle no active editor gracefully')
+      } catch (error) {
+        assert.ok(
+          error instanceof Error,
+          'Should throw a proper error if it fails',
+        )
+      }
+    })
+
+    test('Should handle no selection (cursor only) gracefully', async () => {
       const document = await vscode.workspace.openTextDocument({
-        content: '',
+        content: 'Text without selection',
         language: 'markdown',
       })
-
       const editor = await vscode.window.showTextDocument(document)
       const position = new vscode.Position(0, 0)
       editor.selection = new vscode.Selection(position, position)
 
-      const selectedText = document.getText(editor.selection)
-      const clipboardText = 'https://example.com'
-      const replacementText = `[](${clipboardText})`
+      try {
+        await vscode.commands.executeCommand('paste-markdown-link.paste')
+        assert.ok(true, 'Command should handle no selection gracefully')
+      } catch (error) {
+        assert.ok(
+          error instanceof Error,
+          'Should throw a proper error if it fails',
+        )
+      }
+    })
 
-      await editor.edit((editBuilder) => {
-        editBuilder.replace(editor.selection, replacementText)
+    test('Should handle empty clipboard', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'some text',
+        language: 'markdown',
       })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 0, 0, 4)
 
-      const startChar = position.character
-      const prefixLength = 0
-      const bracketStart = startChar + prefixLength + 1
-      const expectedPosition = new vscode.Position(0, bracketStart)
+      await vscode.env.clipboard.writeText('')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      editor.selection = new vscode.Selection(
-        expectedPosition,
-        expectedPosition,
-      )
-
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
-        '[](https://example.com)',
-        'Should create placeholder link',
-      )
-      assert.strictEqual(
-        editor.selection.start.character,
-        expectedPosition.character,
-        'Cursor should be inside brackets',
+        document.getText(),
+        'some text',
+        'Content should remain unchanged with empty clipboard',
       )
     })
 
-    test('Should position cursor at end when pasting non-URL content', async () => {
+    test('Should handle whitespace-only clipboard', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'some text',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 0, 0, 4)
+
+      await vscode.env.clipboard.writeText('   ')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      assert.strictEqual(
+        document.getText(),
+        'some text',
+        'Content should remain unchanged with whitespace-only clipboard',
+      )
+    })
+  })
+
+  // ─── Paste Command (Ctrl+V) ──────────────────────────────────────
+
+  suite('Paste Command (Ctrl+V)', () => {
+    test('Valid selection + URL → markdown link with cursor at end', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'abc',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 0, 0, 3)
+
+      await vscode.env.clipboard.writeText('https://example.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      assert.strictEqual(document.getText(), '[abc](https://example.com)')
+      // "[abc](https://example.com)" = 26 chars
+      assert.strictEqual(editor.selection.start.line, 0)
+      assert.strictEqual(editor.selection.start.character, 26)
+    })
+
+    test('Valid selection + non-URL → paste as-is with cursor at end', async () => {
       const document = await vscode.workspace.openTextDocument({
         content: 'selected',
         language: 'markdown',
       })
-
       const editor = await vscode.window.showTextDocument(document)
-      const selection = new vscode.Selection(0, 0, 0, 8)
-      editor.selection = selection
+      editor.selection = new vscode.Selection(0, 0, 0, 8)
 
-      const clipboardText = 'just some text'
-      const replacementText = clipboardText
+      await vscode.env.clipboard.writeText('just some text')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      await editor.edit((editBuilder) => {
-        editBuilder.replace(selection, replacementText)
+      assert.strictEqual(document.getText(), 'just some text')
+      assert.strictEqual(editor.selection.start.character, 14)
+    })
+
+    test('Selection inside existing inline link → paste as-is', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '[link text](https://example.com)',
+        language: 'markdown',
       })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 1, 0, 10)
 
-      const startChar = selection.start.character
-      const replacementLines = replacementText.split('\n')
-      const lastLine = selection.start.line + replacementLines.length - 1
-      const lastLineLength =
-        replacementLines[replacementLines.length - 1].length
-      const expectedPosition = new vscode.Position(
-        lastLine,
-        startChar + lastLineLength,
-      )
+      await vscode.env.clipboard.writeText('https://other.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      editor.selection = new vscode.Selection(
-        expectedPosition,
-        expectedPosition,
-      )
-
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
-        'just some text',
-        'Should paste non-URL content as-is',
-      )
-      assert.strictEqual(
-        editor.selection.start.character,
-        expectedPosition.character,
-        'Cursor should be at end',
+        document.getText(),
+        '[https://other.com](https://example.com)',
       )
     })
 
-    test('Should handle multi-line content correctly', async () => {
+    test('Selection inside reference-style link → paste as-is', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '[link text][ref-id]',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 1, 0, 10)
+
+      await vscode.env.clipboard.writeText('https://other.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      assert.strictEqual(document.getText(), '[https://other.com][ref-id]')
+    })
+
+    test('Selection inside inline link with balanced-paren URL → paste as-is', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '[wiki](https://en.wikipedia.org/wiki/Foo_(bar))',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+      // Select "wiki" text inside the link
+      editor.selection = new vscode.Selection(0, 1, 0, 5)
+
+      await vscode.env.clipboard.writeText('https://other.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      assert.strictEqual(
+        document.getText(),
+        '[https://other.com](https://en.wikipedia.org/wiki/Foo_(bar))',
+      )
+    })
+
+    test('Multi-line selection → paste as-is', async () => {
       const document = await vscode.workspace.openTextDocument({
         content: 'line1\nline2',
         language: 'markdown',
       })
-
       const editor = await vscode.window.showTextDocument(document)
-      const selection = new vscode.Selection(0, 0, 1, 5)
-      editor.selection = selection
+      editor.selection = new vscode.Selection(0, 0, 1, 5)
 
-      const selectedText = document.getText(selection)
-      const clipboardText = 'https://example.com'
-      const replacementText = `[${selectedText}](${clipboardText})`
+      await vscode.env.clipboard.writeText('https://example.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      await editor.edit((editBuilder) => {
-        editBuilder.replace(selection, replacementText)
+      assert.strictEqual(document.getText(), 'https://example.com')
+    })
+
+    test('Selection containing link syntax inside code span → creates link', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '`[TEXT](URL)`',
+        language: 'markdown',
       })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 0, 0, 13)
 
-      const startChar = selection.start.character
-      const replacementLines = replacementText.split('\n')
-      const lastLine = selection.start.line + replacementLines.length - 1
-      const lastLineLength =
-        replacementLines[replacementLines.length - 1].length
-      const expectedPosition = new vscode.Position(
-        lastLine,
-        startChar + lastLineLength,
-      )
+      await vscode.env.clipboard.writeText('https://example.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      editor.selection = new vscode.Selection(
-        expectedPosition,
-        expectedPosition,
+      assert.strictEqual(
+        document.getText(),
+        '[`[TEXT](URL)`](https://example.com)',
       )
+    })
+  })
 
-      const updatedContent = document.getText()
+  // ─── Paste Markdown Link (forced, no check) ──────────────────────
+
+  suite('Paste Markdown Link (forced, no check)', () => {
+    test('No selection → placeholder link with cursor inside brackets', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 0, 0, 0)
+
+      await vscode.env.clipboard.writeText('https://example.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste-nocheck')
+
+      assert.strictEqual(document.getText(), '[](https://example.com)')
+      // Cursor inside brackets: position 1 (after "[")
+      assert.strictEqual(editor.selection.start.character, 1)
+    })
+
+    test('With selection → forced link regardless of validity', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '[existing link](url)',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 0, 0, 20)
+
+      await vscode.env.clipboard.writeText('/relative/path')
+      await vscode.commands.executeCommand('paste-markdown-link.paste-nocheck')
+
       assert.strictEqual(
-        updatedContent,
-        '[line1\nline2](https://example.com)',
-        'Should create multi-line markdown link',
-      )
-      assert.strictEqual(
-        editor.selection.start.line,
-        expectedPosition.line,
-        'Cursor should be on last line',
-      )
-      assert.strictEqual(
-        editor.selection.start.character,
-        expectedPosition.character,
-        'Cursor should be at end',
+        document.getText(),
+        '[[existing link](url)](/relative/path)',
       )
     })
 
-    test('Should replace newlines with spaces in forced mode with multi-line selection', async () => {
+    test('Non-URL clipboard → still creates link (relative path use case)', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'text',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 0, 0, 4)
+
+      await vscode.env.clipboard.writeText('/relative/path')
+      await vscode.commands.executeCommand('paste-markdown-link.paste-nocheck')
+
+      assert.strictEqual(document.getText(), '[text](/relative/path)')
+    })
+
+    test('Multi-line selection → newlines replaced with spaces', async () => {
       const document = await vscode.workspace.openTextDocument({
         content: 'line1\nline2\nline3',
         language: 'markdown',
       })
-
       const editor = await vscode.window.showTextDocument(document)
-      const selection = new vscode.Selection(0, 0, 2, 5) // Select all three lines
-      editor.selection = selection
+      editor.selection = new vscode.Selection(0, 0, 2, 5)
 
-      const selectedText = document.getText(selection)
-      const clipboardText = 'https://example.com'
-      // In forced mode, newlines should be replaced with spaces
-      const cleanedSelectedText = selectedText.replace(/\n/g, ' ')
-      const replacementText = `[${cleanedSelectedText}](${clipboardText})`
+      await vscode.env.clipboard.writeText('https://example.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste-nocheck')
 
-      await editor.edit((editBuilder) => {
-        editBuilder.replace(selection, replacementText)
-      })
-
-      // Since newlines are replaced with spaces, the result should be single-line
-      const startChar = selection.start.character
-      const replacementLines = replacementText.split('\n')
-      const lastLine = selection.start.line + replacementLines.length - 1
-      const lastLineLength =
-        replacementLines[replacementLines.length - 1].length
-      const expectedPosition = new vscode.Position(
-        lastLine,
-        startChar + lastLineLength,
-      )
-
-      editor.selection = new vscode.Selection(
-        expectedPosition,
-        expectedPosition,
-      )
-
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '[line1 line2 line3](https://example.com)',
-        'Should create single-line markdown link with spaces',
       )
-      assert.strictEqual(
-        editor.selection.start.line,
-        expectedPosition.line,
-        'Cursor should be on the same line',
-      )
-      assert.strictEqual(
-        editor.selection.start.character,
-        expectedPosition.character,
-        'Cursor should be at end',
-      )
+      assert.strictEqual(editor.selection.start.line, 0)
+      // "[line1 line2 line3](https://example.com)" = 40 chars
+      assert.strictEqual(editor.selection.start.character, 40)
+    })
+  })
+
+  // ─── Paste Markdown Image ────────────────────────────────────────
+
+  suite('Paste Markdown Image', () => {
+    test('No selection → placeholder image with cursor inside brackets', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: '',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 0, 0, 0)
+
+      await vscode.env.clipboard.writeText('https://example.com/img.png')
+      await vscode.commands.executeCommand('paste-markdown-link.paste-img')
+
+      assert.strictEqual(document.getText(), '![](https://example.com/img.png)')
+      // Cursor inside brackets: position 2 (after "![")
+      assert.strictEqual(editor.selection.start.character, 2)
     })
 
-    test('Should replace newlines with spaces in forced mode with multi-line selection for images', async () => {
+    test('With selection → creates image link with cursor at end', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'alt text',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+      editor.selection = new vscode.Selection(0, 0, 0, 8)
+
+      await vscode.env.clipboard.writeText('https://example.com/img.jpg')
+      await vscode.commands.executeCommand('paste-markdown-link.paste-img')
+
+      assert.strictEqual(
+        document.getText(),
+        '![alt text](https://example.com/img.jpg)',
+      )
+      assert.strictEqual(editor.selection.start.character, 40)
+    })
+
+    test('Multi-line selection → newlines replaced with spaces', async () => {
       const document = await vscode.workspace.openTextDocument({
         content: 'alt text\nwith\nmultiple lines',
         language: 'markdown',
       })
-
       const editor = await vscode.window.showTextDocument(document)
-      const selection = new vscode.Selection(0, 0, 2, 14) // Select all three lines (line 2 has 'multiple lines' = 14 chars)
-      editor.selection = selection
+      editor.selection = new vscode.Selection(0, 0, 2, 14)
 
-      const selectedText = document.getText(selection)
-      const clipboardText = 'https://example.com/image.jpg'
-      // In forced mode, newlines should be replaced with spaces
-      const cleanedSelectedText = selectedText.replace(/\n/g, ' ')
-      const replacementText = `![${cleanedSelectedText}](${clipboardText})`
+      await vscode.env.clipboard.writeText('https://example.com/image.jpg')
+      await vscode.commands.executeCommand('paste-markdown-link.paste-img')
 
-      await editor.edit((editBuilder) => {
-        editBuilder.replace(selection, replacementText)
-      })
-
-      // Since newlines are replaced with spaces, the result should be single-line
-      const startChar = selection.start.character
-      const replacementLines = replacementText.split('\n')
-      const lastLine = selection.start.line + replacementLines.length - 1
-      const lastLineLength =
-        replacementLines[replacementLines.length - 1].length
-      const expectedPosition = new vscode.Position(
-        lastLine,
-        startChar + lastLineLength,
-      )
-
-      editor.selection = new vscode.Selection(
-        expectedPosition,
-        expectedPosition,
-      )
-
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '![alt text with multiple lines](https://example.com/image.jpg)',
-        'Should create single-line markdown image with spaces',
-      )
-      assert.strictEqual(
-        editor.selection.start.line,
-        expectedPosition.line,
-        'Cursor should be on the same line',
-      )
-      assert.strictEqual(
-        editor.selection.start.character,
-        expectedPosition.character,
-        'Cursor should be at end',
       )
     })
+  })
 
-    test('Should position cursor correctly with multiple selections - specific bug case', async () => {
+  // ─── Cursor Positioning Tests ─────────────────────────────────────
+
+  suite('Cursor Positioning', () => {
+    test('Multiple selections across lines - cursor at end of last replacement', async () => {
       const document = await vscode.workspace.openTextDocument({
         content: 'abcde\nfghij\nklmno\npqrst\nuvwxyz',
         language: 'markdown',
       })
-
       const editor = await vscode.window.showTextDocument(document)
 
-      // Create multiple selections:
-      // 1. First selection: "abcde\nfg" (multi-line)
-      // 2. Second selection: "kl" (single-line, this is the LAST selection)
       const selections = [
-        new vscode.Selection(0, 0, 1, 2), // "abcde\nfg" (multi-line)
-        new vscode.Selection(2, 0, 2, 2), // "kl" (single-line, this is the LAST selection)
+        new vscode.Selection(0, 0, 1, 2), // "abcde\nfg" (multi-line → paste as-is)
+        new vscode.Selection(2, 0, 2, 2), // "kl" (single-line → markdown link, LAST)
       ]
       editor.selections = selections
 
-      // Set up clipboard
       await vscode.env.clipboard.writeText('http://example.com')
-
-      // Execute the command (normal mode, should paste URL as-is for first, link for second if valid)
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
-
-      // First selection should be replaced with URL as-is: "http://example.com"
-      // Second selection should be replaced with markdown link: "[kl](http://example.com)"
-      const expectedContent =
-        'http://example.comhij\n[kl](http://example.com)mno\npqrst\nuvwxyz'
       assert.strictEqual(
-        updatedContent,
-        expectedContent,
-        'Both selections should be replaced correctly',
+        document.getText(),
+        'http://example.comhij\n[kl](http://example.com)mno\npqrst\nuvwxyz',
       )
-
-      // Cursor should be positioned at the end of the LAST selection's replacement
-      // The last selection was "kl" on line 2 (which becomes line 1 after first replacement), position 0-2
-      // After replacement it becomes "[kl](http://example.com)" = 24 characters
-      // So cursor should be at line 1, character 24
-      const expectedCursorLine = 1
-      const expectedCursorChar = 24 // length of "[kl](http://example.com)"
-
-      assert.strictEqual(
-        editor.selection.start.line,
-        expectedCursorLine,
-        'Cursor should be on the correct line',
-      )
-      assert.strictEqual(
-        editor.selection.start.character,
-        expectedCursorChar,
-        'Cursor should be at the end of the last selection replacement',
-      )
+      assert.strictEqual(editor.selection.start.line, 1)
+      // "[kl](http://example.com)" = 24 chars
+      assert.strictEqual(editor.selection.start.character, 24)
     })
 
-    test('Should position cursor correctly when selections are not in document order', async () => {
+    test('Selections not in document order - cursor tracks last in array', async () => {
       const document = await vscode.workspace.openTextDocument({
         content: 'line1\nline2\nline3\nline4\nline5',
         language: 'markdown',
       })
-
       const editor = await vscode.window.showTextDocument(document)
 
-      // Key insight: Create selections where the LAST in array appears BEFORE others in document
-      // Current buggy logic: processes array order but applies line deltas as if all non-last affect last
-      // This will incorrectly apply line deltas from selections that appear AFTER the last selection
-
       const selections = [
-        new vscode.Selection(3, 0, 4, 5), // "line4\nline5" (2 lines become 1) - NOT last in array, appears AFTER
-        new vscode.Selection(1, 0, 1, 5), // "line2" - LAST in array, appears BEFORE the above selection
+        new vscode.Selection(3, 0, 4, 5), // "line4\nline5" (appears after, NOT last in array)
+        new vscode.Selection(1, 0, 1, 5), // "line2" (appears before, LAST in array)
       ]
       editor.selections = selections
 
       await vscode.env.clipboard.writeText('http://example.com')
       await vscode.commands.executeCommand('paste-markdown-link.paste-nocheck')
 
-      const updatedContent = document.getText()
-
-      // Expected content:
-      // "line4\nline5" -> "[line4 line5](http://example.com)"
-      // "line2" -> "[line2](http://example.com)"
-      const expectedContent =
-        'line1\n[line2](http://example.com)\nline3\n[line4 line5](http://example.com)'
       assert.strictEqual(
-        updatedContent,
-        expectedContent,
-        'Content should be correct',
+        document.getText(),
+        'line1\n[line2](http://example.com)\nline3\n[line4 line5](http://example.com)',
       )
+      // Cursor at end of "line2" replacement on line 1
+      assert.strictEqual(editor.selection.start.line, 1)
+      // "[line2](http://example.com)" = 27 chars
+      assert.strictEqual(editor.selection.start.character, 27)
+    })
 
-      // THE BUG: Current logic will incorrectly calculate cursor position
-      // - It processes "line4\nline5" first (array index 0), calculates lineDelta = -1 (2 lines -> 1 line)
-      // - Then it applies this lineDelta to "line2" position, even though "line4\nline5" appears AFTER "line2"
-      // - So it will think "line2" moved from line 1 to line 0, which is wrong
+    test('Same-line multi-selection - character delta correctly applied', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'abc def ghi',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
 
-      // CORRECT: "line2" is on line 1, becomes "[line2](http://example.com)" (27 chars)
-      // WRONG (with current bug): cursor might be calculated for line 0 + some wrong position
+      // Two selections on the same line
+      const selections = [
+        new vscode.Selection(0, 0, 0, 3), // "abc" (first in array)
+        new vscode.Selection(0, 8, 0, 11), // "ghi" (LAST in array)
+      ]
+      editor.selections = selections
 
-      const expectedCursorLine = 1 // "line2" is on line 1
-      const expectedCursorChar = 27 // length of "[line2](http://example.com)"
+      await vscode.env.clipboard.writeText('http://example.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      // This should FAIL with the current buggy implementation
+      // "abc" → "[abc](http://example.com)" (25 chars, was 3, delta +22)
+      // "ghi" → "[ghi](http://example.com)" (25 chars)
       assert.strictEqual(
-        editor.selection.start.line,
-        expectedCursorLine,
-        'Cursor should be on line 1 where line2 was replaced',
+        document.getText(),
+        '[abc](http://example.com) def [ghi](http://example.com)',
       )
+      // Cursor: startChar = 8 + 22 = 30, finalChar = 30 + 25 = 55
+      assert.strictEqual(editor.selection.start.line, 0)
+      assert.strictEqual(editor.selection.start.character, 55)
+    })
+
+    test('Three selections on the same line', async () => {
+      const document = await vscode.workspace.openTextDocument({
+        content: 'aa bb cc',
+        language: 'markdown',
+      })
+      const editor = await vscode.window.showTextDocument(document)
+
+      const selections = [
+        new vscode.Selection(0, 0, 0, 2), // "aa"
+        new vscode.Selection(0, 3, 0, 5), // "bb"
+        new vscode.Selection(0, 6, 0, 8), // "cc" (LAST)
+      ]
+      editor.selections = selections
+
+      await vscode.env.clipboard.writeText('http://x.com')
+      await vscode.commands.executeCommand('paste-markdown-link.paste')
+
+      // "aa" → "[aa](http://x.com)" (18 chars, was 2, delta +16)
+      // "bb" → "[bb](http://x.com)" (18 chars, was 2, delta +16)
+      // "cc" → "[cc](http://x.com)" (18 chars)
       assert.strictEqual(
-        editor.selection.start.character,
-        expectedCursorChar,
-        'Cursor should be at end of [line2](http://example.com)',
+        document.getText(),
+        '[aa](http://x.com) [bb](http://x.com) [cc](http://x.com)',
       )
+      // charDelta = 16 + 16 = 32
+      // startChar = 6 + 32 = 38, finalChar = 38 + 18 = 56
+      assert.strictEqual(editor.selection.start.line, 0)
+      assert.strictEqual(editor.selection.start.character, 56)
     })
   })
 
-  // Tests for markdown image selections
-  suite('Markdown Image Selection Tests', () => {
+  // ─── Markdown Image Selection Tests ───────────────────────────────
+
+  suite('Markdown Image Selection', () => {
     test('Should create markdown link when selecting text with complete markdown image - case 1', async () => {
       const document = await vscode.workspace.openTextDocument({
         content: 'Hello![TEXT](https://example.com)',
@@ -802,21 +861,15 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select the entire text "Hello![TEXT](https://example.com)"
       const selection = new vscode.Selection(0, 0, 0, 33)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '[Hello![TEXT](https://example.com)](https://example.com/pasted)',
-        'Should create markdown link wrapping the text with image',
       )
     })
 
@@ -827,21 +880,15 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select the entire image "![Open VSX Version](https://example.com)"
       const selection = new vscode.Selection(0, 0, 0, 40)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '[![Open VSX Version](https://example.com)](https://example.com/pasted)',
-        'Should create markdown link wrapping the complete image',
       )
     })
 
@@ -852,22 +899,15 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select the entire text "![TEXT](https://example.com)sas![TEXT](https://example.com)"
-      // Length: 59 characters (verified by debug output)
       const selection = new vscode.Selection(0, 0, 0, 59)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '[![TEXT](https://example.com)sas![TEXT](https://example.com)](https://example.com/pasted)',
-        'Should create markdown link wrapping text with multiple images',
       )
     })
 
@@ -878,23 +918,13 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select the entire text "![TEXT](https://example.com)sas[TEXT](https://example.com)"
-      // Length: 58 characters (verified by debug output)
       const selection = new vscode.Selection(0, 0, 0, 58)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
-      assert.strictEqual(
-        updatedContent,
-        'https://example.com/pasted',
-        'Should paste URL as-is when selection contains regular markdown link',
-      )
+      assert.strictEqual(document.getText(), 'https://example.com/pasted')
     })
 
     test('Should NOT create markdown link when selection partially overlaps markdown image - case 5', async () => {
@@ -904,26 +934,18 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select "![TEXT](https://example.com)sas![TE" - partial overlap with second image
-      // Length: 35 characters (verified by debug output)
       const selection = new vscode.Selection(0, 0, 0, 35)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         'https://example.com/pastedXT](https://example.com)',
-        'Should paste URL as-is when selection partially overlaps markdown image',
       )
     })
 
-    // Tests for partial selections within markdown images
     test('Should NOT create markdown link when selecting URL part within markdown image - case 6', async () => {
       const document = await vscode.workspace.openTextDocument({
         content: '![TEXT](https://example.com)',
@@ -931,21 +953,15 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select "https://example.com" inside the image (positions 8-27, end exclusive)
       const selection = new vscode.Selection(0, 8, 0, 27)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '![TEXT](https://example.com/pasted)',
-        'Should paste URL as-is when selecting URL part within markdown image',
       )
     })
 
@@ -956,21 +972,15 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select "XT](htt" spanning across text and URL
       const selection = new vscode.Selection(0, 4, 0, 11)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '![TEhttps://example.com/pastedps://example.com)',
-        'Should paste URL as-is when selecting partial text within markdown image',
       )
     })
 
@@ -981,21 +991,15 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select "![" at the beginning
       const selection = new vscode.Selection(0, 0, 0, 2)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         'https://example.com/pastedTEXT](https://example.com)',
-        'Should paste URL as-is when selecting image prefix within markdown image',
       )
     })
 
@@ -1006,21 +1010,15 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select "](" between text and URL
       const selection = new vscode.Selection(0, 6, 0, 8)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '![TEXThttps://example.com/pastedhttps://example.com)',
-        'Should paste URL as-is when selecting bracket part within markdown image',
       )
     })
 
@@ -1031,21 +1029,15 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select "TEX" within alt text
       const selection = new vscode.Selection(0, 2, 0, 5)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '![https://example.com/pastedT](https://example.com)',
-        'Should paste URL as-is when selecting partial alt text within markdown image',
       )
     })
 
@@ -1056,21 +1048,15 @@ suite('Extension Test Suite', () => {
       })
 
       const editor = await vscode.window.showTextDocument(document)
-      // Select "TEXT" (full alt text but not the whole image)
       const selection = new vscode.Selection(0, 2, 0, 6)
       editor.selection = selection
 
-      // Set clipboard to URL
       await vscode.env.clipboard.writeText('https://example.com/pasted')
-
-      // Execute normal paste command
       await vscode.commands.executeCommand('paste-markdown-link.paste')
 
-      const updatedContent = document.getText()
       assert.strictEqual(
-        updatedContent,
+        document.getText(),
         '![https://example.com/pasted](https://example.com)',
-        'Should paste URL as-is when selecting full alt text within markdown image',
       )
     })
   })

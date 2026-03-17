@@ -1,64 +1,110 @@
 import * as vscode from 'vscode'
 
-const URL_PATTERN =
+export const URL_PATTERN =
   /^(https?|ftps?|file|sftp|ssh|scp|mailto|tel|sms|callto|magnet|torrent|ed2k|thunder|dchub|dcpp|irc|ircs|news|nntp|git|svn|hg|data|blob|ipfs|ipns|chrome|chrome-extension|about|resource|moz-extension|ws|wss|vscode|cursor):(\/\/)?[^\s]+$/
 
-// Pattern to detect existing markdown links and images
-// Updated to handle nested structures like [![image](url)](link)
-const MARKDOWN_LINK_PATTERN = /!?\[(?:[^\[\]]|\[[^\]]*\])*\]\([^)]+\)/g
+// Inline links/images: [text](url) or ![text](url)
+// Supports nested brackets in link text and balanced parentheses in URLs (one level deep)
+export const MARKDOWN_INLINE_PATTERN =
+  /!?\[(?:[^\[\]]|\[[^\]]*\])*\]\((?:[^()]|\([^)]*\))*\)/g
 
-// Pattern to detect markdown images specifically
-const MARKDOWN_IMAGE_PATTERN = /!\[(?:[^\[\]]|\[[^\]]*\])*\]\([^)]+\)/g
+// Reference-style links/images: [text][id] or ![text][id] or [text][] or ![text][]
+export const MARKDOWN_REF_PATTERN = /!?\[(?:[^\[\]]|\[[^\]]*\])*\]\[[^\]]*\]/g
+
+/**
+ * Mask content inside inline code spans so that markdown patterns
+ * inside backticks are not detected as links/images.
+ * Preserves string length so character positions remain valid.
+ * Pure function.
+ */
+export function maskCodeSpans(text: string): string {
+  return text.replace(
+    /(`+)([\s\S]*?)\1/g,
+    (_match, ticks: string, content: string) => {
+      return ticks + ' '.repeat(content.length) + ticks
+    },
+  )
+}
+
+/**
+ * Check if a selection range on a single line is valid for markdown link wrapping.
+ * Returns false if the selection overlaps with existing markdown links,
+ * or partially overlaps with markdown images.
+ * Markdown patterns inside code spans (backticks) are ignored.
+ * Pure function — no VS Code dependency.
+ */
+export function isLineSelectionValid(
+  lineText: string,
+  selectionStart: number,
+  selectionEnd: number,
+): boolean {
+  const maskedText = maskCodeSpans(lineText)
+
+  const allMatches = [
+    ...maskedText.matchAll(MARKDOWN_INLINE_PATTERN),
+    ...maskedText.matchAll(MARKDOWN_REF_PATTERN),
+  ]
+
+  for (const match of allMatches) {
+    const matchStart = match.index!
+    const matchEnd = match.index! + match[0].length
+
+    if (!match[0].startsWith('!')) {
+      // Regular link — any overlap with selection is invalid
+      if (selectionStart < matchEnd && selectionEnd > matchStart) {
+        return false
+      }
+    } else {
+      // Image — partial overlap is invalid, but complete containment is ok
+      const hasOverlap = selectionStart < matchEnd && selectionEnd > matchStart
+      const completelyContains =
+        selectionStart <= matchStart && selectionEnd >= matchEnd
+      if (hasOverlap && !completelyContains) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
 
 function isSelectionValid(
   selection: vscode.Selection,
   document: vscode.TextDocument,
 ): boolean {
-  // Check if selection is on a single line
   if (selection.start.line !== selection.end.line) {
     return false
   }
 
-  // Get the line text
-  const lineText = document.lineAt(selection.start.line).text
-  const selectionStart = selection.start.character
-  const selectionEnd = selection.end.character
+  return isLineSelectionValid(
+    document.lineAt(selection.start.line).text,
+    selection.start.character,
+    selection.end.character,
+  )
+}
 
-  // Find all markdown links and images in the line
-  const allLinksAndImages = Array.from(lineText.matchAll(MARKDOWN_LINK_PATTERN))
-  const onlyImages = Array.from(lineText.matchAll(MARKDOWN_IMAGE_PATTERN))
-
-  // Check if selection contains any regular markdown links (not images)
-  for (const match of allLinksAndImages) {
-    const linkStart = match.index!
-    const linkEnd = match.index! + match[0].length
-
-    // If this is not an image (doesn't start with !)
-    if (!match[0].startsWith('!')) {
-      // Check if selection overlaps with this regular link
-      if (selectionStart < linkEnd && selectionEnd > linkStart) {
-        return false // Selection contains a regular link, not allowed
-      }
+/**
+ * Build the replacement text for a paste operation.
+ * Pure function — no VS Code dependency.
+ */
+export function buildReplacementText(
+  selectedText: string,
+  clipboardText: string,
+  isValid: boolean,
+  forced: boolean,
+  isImg: boolean,
+): string {
+  if (!forced) {
+    if (selectedText && isValid && URL_PATTERN.test(clipboardText)) {
+      return `[${selectedText}](${clipboardText})`
     }
+    return clipboardText
   }
-
-  // Check for partial overlaps with markdown images
-  for (const match of onlyImages) {
-    const imageStart = match.index!
-    const imageEnd = match.index! + match[0].length
-
-    // Check if there's any overlap with the image
-    const hasOverlap = selectionStart < imageEnd && selectionEnd > imageStart
-    const completelyContains =
-      selectionStart <= imageStart && selectionEnd >= imageEnd
-
-    // Allow only if selection completely contains the image, disallow any other overlap
-    if (hasOverlap && !completelyContains) {
-      return false // Any overlap that doesn't completely contain the image is not allowed
-    }
+  if (!selectedText) {
+    return `${isImg ? '!' : ''}[](${clipboardText})`
   }
-
-  return true
+  const cleanedSelectedText = selectedText.replace(/\n/g, ' ')
+  return `${isImg ? '!' : ''}[${cleanedSelectedText}](${clipboardText})`
 }
 
 /**
@@ -86,7 +132,6 @@ function paste(forced: boolean = false, isImg: boolean = false) {
     try {
       const editor = vscode.window.activeTextEditor
       if (!editor) {
-        console.log('No active editor')
         return
       }
 
@@ -99,11 +144,10 @@ function paste(forced: boolean = false, isImg: boolean = false) {
 
       const selections = editor.selections
       if (selections.length === 0) {
-        console.log('No selections found')
         return
       }
 
-      // Process each selection according to the new flow logic
+      // Process each selection according to the flow logic
       let actualReplacementText: string = ''
       let lastSelectionOriginalText: string = ''
       let lastSelectionStart: vscode.Position =
@@ -124,33 +168,13 @@ function paste(forced: boolean = false, isImg: boolean = false) {
           const selectedText = editor.document.getText(selection)
           const isValid = isSelectionValid(selection, editor.document)
 
-          let replacementText: string
-
-          if (!forced) {
-            // Not forced mode
-            if (selectedText && isValid && URL_PATTERN.test(clipboardText)) {
-              // Valid selection with text and clipboard is URL - create markdown link
-              replacementText = `${
-                isImg ? '!' : ''
-              }[${selectedText}](${clipboardText})`
-            } else {
-              // Any other case - paste clipboard text as-is
-              replacementText = clipboardText
-            }
-          } else {
-            // Forced mode
-            if (!selectedText) {
-              // No selected text - create placeholder markdown link
-              replacementText = `${isImg ? '!' : ''}[](${clipboardText})`
-            } else {
-              // Has selected text (regardless of validity) - create markdown link
-              // Replace newlines with spaces in selectedText for forced mode
-              const cleanedSelectedText = selectedText.replace(/\n/g, ' ')
-              replacementText = `${
-                isImg ? '!' : ''
-              }[${cleanedSelectedText}](${clipboardText})`
-            }
-          }
+          const replacementText = buildReplacementText(
+            selectedText,
+            clipboardText,
+            isValid,
+            forced,
+            isImg,
+          )
 
           // Store replacement info for all selections
           selectionReplacements.set(selection, {
@@ -169,7 +193,7 @@ function paste(forced: boolean = false, isImg: boolean = false) {
       })
 
       // Calculate cursor position for the last selection after all edits are complete
-      // Sort selections by document position to correctly calculate line adjustments
+      // Sort selections by document position to correctly calculate adjustments
       const sortedSelections = [...selections].sort((a, b) => {
         if (a.start.line !== b.start.line) {
           return a.start.line - b.start.line
@@ -177,16 +201,18 @@ function paste(forced: boolean = false, isImg: boolean = false) {
         return a.start.character - b.start.character
       })
 
-      // Find the last selection in the array and calculate line delta from selections that appear before it in the document
+      // Find the last selection in the array and calculate deltas from
+      // selections that appear before it in the document
       const lastSelection = selections[selections.length - 1]
       let lineDelta = 0
+      let charDelta = 0
 
       for (const selection of sortedSelections) {
         if (selection === lastSelection) {
           break // Stop when we reach the last selection
         }
 
-        // Only count line deltas from selections that appear before the last selection in the document
+        // Only count deltas from selections that appear before the last selection in the document
         if (
           selection.start.line < lastSelection.start.line ||
           (selection.start.line === lastSelection.start.line &&
@@ -196,12 +222,21 @@ function paste(forced: boolean = false, isImg: boolean = false) {
           const originalLines = info.originalText.split('\n').length - 1
           const replacementLines = info.replacementText.split('\n').length - 1
           lineDelta += replacementLines - originalLines
+
+          // Accumulate character delta for single-line prior selections on the same line
+          if (
+            selection.end.line === lastSelection.start.line &&
+            originalLines === 0 &&
+            replacementLines === 0
+          ) {
+            charDelta += info.replacementText.length - info.originalText.length
+          }
         }
       }
 
-      // Adjust the line position based on changes from earlier edits
+      // Adjust the position based on changes from earlier edits
       const adjustedLine = lastSelectionStart.line + lineDelta
-      const startChar = lastSelectionStart.character
+      const startChar = lastSelectionStart.character + charDelta
       const replacementLines = actualReplacementText.split('\n')
 
       // Calculate the final position considering the replacement text
@@ -240,8 +275,6 @@ function paste(forced: boolean = false, isImg: boolean = false) {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  // console.log('Extension "paste-markdown-link" is now active!');
-
   let disposable = vscode.commands.registerCommand(
     'paste-markdown-link.paste',
     paste(),
