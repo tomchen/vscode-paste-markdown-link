@@ -4,7 +4,7 @@
   "author": "Tom Chen <tomchen.org@gmail.com>",
   "displayName": "Paste Markdown Link",
   "description": "Paste URL as formatted Markdown link when text is selected",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "icon": "icon.png",
   "engines": {
     "vscode": "^1.75.0"
