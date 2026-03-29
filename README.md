@@ -11,7 +11,7 @@ NOTE: VS Code now has [built-in support](https://code.visualstudio.com/updates/v
 3. Press <kbd>Ctrl</kbd> + <kbd>V</kbd> (Windows, Linux) or <kbd>Cmd</kbd> + <kbd>V</kbd> (macOS)
 4. The selected text will be converted into a Markdown link `[TEXT] (URL)` with the URL
 
-[![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/tomchen.paste-markdown-link?label=Visual%20Studio%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=tomchen.paste-markdown-link) [![Open VSX Version](https://img.shields.io/open-vsx/v/tomchen/paste-markdown-link?label=Open%20VSX&color=%23a60ee5)](https://open-vsx.org/extension/tomchen/paste-markdown-link) [![Actions Status](https://github.com/tomchen/vscode-paste-markdown-link/workflows/Test/badge.svg)](https://github.com/tomchen/vscode-paste-markdown-link/actions) [![License](https://img.shields.io/github/license/tomchen/vscode-paste-markdown-link)](https://github.com/tomchen/vscode-paste-markdown-link/blob/main/LICENSE)
+[![Visual Studio Marketplace Version](https://badgen.net/badge/Visual%20Studio%20Marketplace/v1.2.1/blue)](https://marketplace.visualstudio.com/items?itemName=tomchen.paste-markdown-link) [![Open VSX Version](https://badgen.net/badge/Open%20VSX/v1.2.1/a60ee5)](https://open-vsx.org/extension/tomchen/paste-markdown-link) [![Actions Status](https://github.com/tomchen/vscode-paste-markdown-link/workflows/Test/badge.svg)](https://github.com/tomchen/vscode-paste-markdown-link/actions) [![License](https://img.shields.io/github/license/tomchen/vscode-paste-markdown-link)](https://github.com/tomchen/vscode-paste-markdown-link/blob/main/LICENSE) <!-- vbt-version -->
 
 ## Advanced Usage
 
