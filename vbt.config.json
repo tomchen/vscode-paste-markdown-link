@@ -1,5 +1,5 @@
 {
   "push": true,
-  "preBumpCheck": "bun run check-types && bun run lint && bun run format:check && bun run test",
+  "preBump": "bun run check-types && bun run lint && bun run format:check && bun run test",
   "files": ["README.md"]
 }
